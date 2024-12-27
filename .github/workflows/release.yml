@@ -55,18 +55,25 @@ jobs:
       - name: Get Changes
         id: get_changes
         run: |
-          CHANGES=$(git log --pretty=format:"- %s" $(git describe --tags --abbrev=0 HEAD^)..HEAD)
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            # If no previous tag exists, get all commits
+            CHANGES=$(git log --pretty=format:"- %s")
+          else
+            # Get commits between tags
+            CHANGES=$(git log --pretty=format:"- %s" ${PREV_TAG}..HEAD)
+          fi
           echo "changes<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-        
-      - name: Create Release
+
+      - name: Release
         uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
         with:
           files: build/thymelab-vscode-*.vsix
-          draft: true
-          prerelease: false
-          fail_on_unmatched_files: true
+          generate_release_notes: true
           body: |
             ## ThymeLab VSCode Extension ${{ github.ref_name }}
 
@@ -86,4 +93,6 @@ jobs:
             ```
 
             ### What's Changed
-            ${{ steps.get_changes.outputs.changes }} 
+            ${{ steps.get_changes.outputs.changes }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
