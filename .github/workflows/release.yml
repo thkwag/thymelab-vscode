@@ -74,6 +74,7 @@ jobs:
         with:
           files: build/thymelab-vscode-*.vsix
           generate_release_notes: true
+          name: ThymeLab VSCode ${{ github.ref_name }}
           body: |
             ## ThymeLab VSCode Extension ${{ github.ref_name }}
 
