@@ -41,27 +41,27 @@
 
 1. Install ThymeLab extension from VS Code Marketplace
 2. Configure settings as described below
-   - If `thymelab.jarPath` is left empty, the extension will automatically download the latest processor JAR file from GitHub releases
+   - If `thymelab.processor.jarPath` is left empty, the extension will automatically download the latest processor JAR file from GitHub releases
    - Or you can manually download and specify the path to the JAR file
 
 ## ⚙️ Configuration
 
-### Required Settings
+### Processor Settings
 
 | Setting | Description | Default | Required |
 |---------|-------------|---------|----------|
-| `thymelab.jarPath` | Path to ThymeLab processor JAR file. Leave empty for auto-download | - | |
-| `thymelab.javaHome` | Path to Java executable | System Java | |
-| `thymelab.port` | Server port number | 8080 | |
-| `thymelab.logLevel` | Log level | INFO | |
+| `thymelab.processor.jarPath` | Path to ThymeLab processor JAR file. Leave empty for auto-download | - | |
+| `thymelab.processor.javaHome` | Path to Java executable | System Java | |
+| `thymelab.processor.port` | Server port number | 8080 | |
+| `thymelab.processor.logLevel` | Log level (ERROR, WARN, INFO, DEBUG, TRACE) | INFO | |
 
-### Directory Settings
+### Resource Settings
 
 | Setting | Description | Example |
 |---------|-------------|---------|
-| `thymelab.templatePath` | Directory for Thymeleaf templates | `src/main/resources/templates` |
-| `thymelab.staticPath` | Directory for static resources | `src/main/resources/static` |
-| `thymelab.dataPath` | Directory for JSON data files | `src/main/resources/thymelab/data` |
+| `thymelab.resources.templatePath` | Directory for Thymeleaf templates | `src/main/resources/templates` |
+| `thymelab.resources.staticPath` | Directory for static resources | `src/main/resources/static` |
+| `thymelab.resources.dataPath` | Directory for JSON data files | `src/main/resources/thymelab/data` |
 
 ## 🎯 VS Code Interface
 
@@ -105,6 +105,7 @@ Click the external link icon to open in your system's default browser.
    - Verify JAR file path is correct
    - Check if Java is installed
    - Ensure port is available
+   - Make sure all required directories are set
 
 2. **Templates not loading**
    - Check if files are in correct directory
@@ -116,9 +117,10 @@ Click the external link icon to open in your system's default browser.
    - Try restarting server
 
 ### Error Messages
-- "JAR file not found": Set correct path in settings
-- "Port already in use": Change port number
-- "Java not found": Install Java or set Java home
+- "JAR file not found": Set correct path in settings or let the extension download it automatically
+- "Port already in use": Change port number in settings
+- "Java not found": Install Java or set Java home path
+- "Required directories not set": Configure template, static, and data directories
 
 ## 👥 Contributing
 
