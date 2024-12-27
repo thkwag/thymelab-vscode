@@ -1,0 +1,10 @@
+{
+    "recommendations": [
+        "dbaeumer.vscode-eslint",
+        "amodio.tsl-problem-matcher",
+        "vscjava.vscode-java-debug",
+        "vscjava.vscode-java-pack",
+        "redhat.java",
+        "vscjava.vscode-gradle"
+    ]
+} 

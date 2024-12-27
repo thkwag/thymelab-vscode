@@ -1,0 +1,89 @@
+name: Release Extension
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write  # Add write permission for releases
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Validate tag format
+        run: |
+          if [[ ! ${{ github.ref_name }} =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid tag format. Must be in format v1.2.3"
+            exit 1
+          fi
+      
+      - name: Check version match
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "Version mismatch: Tag version ($TAG_VERSION) does not match package.json version ($PKG_VERSION)"
+            exit 1
+          fi
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Prepare build directory
+        shell: bash
+        run: |
+          rm -rf build
+          mkdir -p build
+        
+      - name: Install vsce
+        run: npm install -g @vscode/vsce
+        
+      - name: Package extension
+        shell: bash
+        run: vsce package -o "build/thymelab-vscode-${GITHUB_REF_NAME#v}.vsix"
+
+      - name: Get Changes
+        id: get_changes
+        run: |
+          CHANGES=$(git log --pretty=format:"- %s" $(git describe --tags --abbrev=0 HEAD^)..HEAD)
+          echo "changes<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: build/thymelab-vscode-*.vsix
+          draft: true
+          prerelease: false
+          fail_on_unmatched_files: true
+          body: |
+            ## ThymeLab VSCode Extension ${{ github.ref_name }}
+
+            ### Installation Instructions
+
+            #### Method 1: Install from VSIX
+            1. Download the `thymelab-vscode-${{ github.ref_name }}.vsix` file from this release
+            2. Open VS Code
+            3. Go to Extensions view (Ctrl+Shift+X)
+            4. Click on the '...' menu (Views and More Actions)
+            5. Select 'Install from VSIX...'
+            6. Choose the downloaded VSIX file
+
+            #### Method 2: Command Line Installation
+            ```bash
+            code --install-extension thymelab-vscode-${{ github.ref_name }}.vsix
+            ```
+
+            ### What's Changed
+            ${{ steps.get_changes.outputs.changes }} 

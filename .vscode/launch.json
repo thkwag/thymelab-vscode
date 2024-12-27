@@ -1,0 +1,43 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run VSCode Extension",
+            "type": "extensionHost",
+            "request": "launch",
+            "args": [
+                "--extensionDevelopmentPath=${workspaceFolder}"
+            ],
+            "outFiles": [
+                "${workspaceFolder}/dist/**/*.js"
+            ],
+            "preLaunchTask": "vscode:watch"
+        },
+        {
+            "name": "VSCode Extension Tests",
+            "type": "extensionHost",
+            "request": "launch",
+            "args": [
+                "--extensionDevelopmentPath=${workspaceFolder}",
+                "--extensionTestsPath=${workspaceFolder}/dist/test/suite/index"
+            ],
+            "outFiles": [
+                "${workspaceFolder}/dist/**/*.js"
+            ],
+            "preLaunchTask": "vscode:watch"
+        },
+        {
+            "name": "Debug ThymeLab Processor",
+            "type": "java",
+            "request": "attach",
+            "hostName": "localhost",
+            "port": 5005
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Extension + Server",
+            "configurations": ["Run VSCode Extension", "Debug ThymeLab Processor"]
+        }
+    ]
+} 

@@ -1,0 +1,42 @@
+# Development files
+.vscode/**
+.vscode-test/**
+src/**
+.gitignore
+.vscodeignore
+.github/**
+tsconfig.json
+webpack.config.js
+eslint.config.*
+*.vsix
+.eslintrc.json
+.eslintignore
+.prettierrc
+.prettierignore
+
+# Build and test files
+out/**
+build/**
+**/test/**
+**/*.test.*
+**/*.spec.*
+**/*.map
+**/*.ts
+
+# Documentation
+docs/**
+CHANGELOG.md
+CONTRIBUTING.md
+
+# Node modules (all bundled by webpack)
+node_modules/**
+
+# Keep only necessary files
+!dist/extension.js
+!dist/extension.js.map
+!resources/thymelab-icon.png
+!resources/thymelab-icon.svg
+!syntaxes/thymeleaf.tmLanguage.json
+!LICENSE.txt
+!README.md
+!package.json 

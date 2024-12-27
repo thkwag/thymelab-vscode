@@ -1,0 +1,38 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "vscode:watch",
+            "type": "shell",
+            "command": "npm run watch",
+            "problemMatcher": "$tsc-watch",
+            "isBackground": true,
+            "presentation": {
+                "reveal": "never"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "vscode:install",
+            "type": "shell",
+            "command": "npm install",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "vscode:compile",
+            "type": "shell",
+            "command": "npm run compile",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "group": "build"
+        }
+    ]
+} 

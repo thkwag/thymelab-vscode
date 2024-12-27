@@ -1,0 +1,291 @@
+{
+  "name": "thymelab-vscode",
+  "displayName": "ThymeLab",
+  "description": "Instantly preview and test your Thymeleaf templates without setting up a Spring Boot application",
+  "version": "1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thkwag/thymelab-vscode.git"
+  },
+  "publisher": "thkwag",
+  "license": "MIT",
+  "icon": "resources/thymelab-icon.png",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "thymeleaf",
+    "spring",
+    "template",
+    "preview",
+    "html"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "thymelab",
+          "title": "ThymeLab",
+          "icon": "resources/thymelab-icon.png"
+        }
+      ]
+    },
+    "views": {
+      "thymelab": [
+        {
+          "id": "thymelab-resources",
+          "name": "Thymeleaf Resources",
+          "icon": "$(file-directory)"
+        },
+        {
+          "id": "thymelab-server",
+          "name": "ThymeLab Processor",
+          "icon": "$(server-process)"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "thymelab.startServer",
+        "title": "Start Server",
+        "category": "ThymeLab",
+        "icon": "$(play)"
+      },
+      {
+        "command": "thymelab.stopServer",
+        "title": "Stop Server",
+        "category": "ThymeLab",
+        "icon": "$(stop)"
+      },
+      {
+        "command": "thymelab.restartServer",
+        "title": "Restart Server",
+        "category": "ThymeLab",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "thymelab.refreshServer",
+        "title": "Refresh Server",
+        "category": "ThymeLab"
+      },
+      {
+        "command": "thymelab.refreshResources",
+        "title": "Refresh Resources",
+        "category": "ThymeLab",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "thymelab.changeLogLevel",
+        "title": "Change Log Level",
+        "category": "ThymeLab",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "thymelab.openSettings",
+        "title": "Open Settings",
+        "category": "ThymeLab",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "thymelab.setPort",
+        "title": "Change Port",
+        "category": "ThymeLab",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "thymelab.openBrowser",
+        "title": "Open in VS Code Browser",
+        "category": "ThymeLab",
+        "icon": "$(browser)"
+      },
+      {
+        "command": "thymelab.openExternalBrowser",
+        "title": "Open in External Browser",
+        "category": "ThymeLab",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "thymelab.selectTemplateDir",
+        "title": "Select Template Directory",
+        "category": "ThymeLab",
+        "icon": "$(folder)"
+      },
+      {
+        "command": "thymelab.selectStaticDir",
+        "title": "Select Static Directory",
+        "category": "ThymeLab",
+        "icon": "$(folder)"
+      },
+      {
+        "command": "thymelab.selectDataDir",
+        "title": "Select Data Directory",
+        "category": "ThymeLab",
+        "icon": "$(folder)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "thymelab.refreshResources",
+          "when": "view == thymelab-resources",
+          "group": "navigation"
+        },
+        {
+          "command": "thymelab.startServer",
+          "when": "view == thymelab-server && !thymelab:isRunning && !thymelab:isStarting",
+          "group": "navigation"
+        },
+        {
+          "command": "thymelab.stopServer",
+          "when": "view == thymelab-server && thymelab:isRunning && !thymelab:isStarting",
+          "group": "navigation"
+        },
+        {
+          "command": "thymelab.restartServer",
+          "when": "view == thymelab-server && thymelab:isRunning && !thymelab:isStarting",
+          "group": "navigation"
+        },
+        {
+          "command": "thymelab.openSettings",
+          "when": "view == thymelab-server",
+          "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "thymelab.openBrowser",
+          "when": "resourceLangId == thymeleaf && thymelab:isRunning",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "thymelab.setPort",
+          "when": "view == thymelab-server && viewItem == server-port",
+          "group": "inline",
+          "icon": "$(gear)"
+        },
+        {
+          "command": "thymelab.changeLogLevel",
+          "when": "view == thymelab-server && viewItem == server-log-level",
+          "group": "inline",
+          "icon": "$(gear)"
+        },
+        {
+          "command": "thymelab.openBrowser",
+          "when": "view == thymelab-server && viewItem == server-url",
+          "group": "inline",
+          "icon": "$(browser)"
+        },
+        {
+          "command": "thymelab.openExternalBrowser",
+          "when": "view == thymelab-server && viewItem == server-url",
+          "group": "inline",
+          "icon": "$(link-external)"
+        },
+        {
+          "command": "thymelab.selectTemplateDir",
+          "when": "view == thymelab-resources && viewItem == template-dir",
+          "group": "inline",
+          "icon": "$(folder)"
+        },
+        {
+          "command": "thymelab.selectStaticDir",
+          "when": "view == thymelab-resources && viewItem == static-dir",
+          "group": "inline",
+          "icon": "$(folder)"
+        },
+        {
+          "command": "thymelab.selectDataDir",
+          "when": "view == thymelab-resources && viewItem == data-dir",
+          "group": "inline",
+          "icon": "$(folder)"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "ThymeLab",
+      "properties": {
+        "thymelab.processor.jarPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to ThymeLab processor JAR file. Leave empty to automatically download from GitHub releases",
+          "scope": "machine"
+        },
+        "thymelab.processor.javaHome": {
+          "type": "string",
+          "default": "",
+          "description": "Path to Java executable (leave empty to use system Java)",
+          "scope": "machine"
+        },
+        "thymelab.processor.port": {
+          "type": "number",
+          "default": 8080,
+          "description": "Server port number",
+          "scope": "machine"
+        },
+        "thymelab.processor.logLevel": {
+          "type": "string",
+          "enum": ["ERROR", "WARN", "INFO", "DEBUG", "TRACE"],
+          "default": "INFO",
+          "description": "Log level",
+          "scope": "machine"
+        },
+        "thymelab.resources.templatePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to Thymeleaf template directory",
+          "scope": "workspace"
+        },
+        "thymelab.resources.staticPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to static resources directory",
+          "scope": "workspace"
+        },
+        "thymelab.resources.dataPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to JSON data directory",
+          "scope": "workspace"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./ && webpack --config webpack.config.js",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package -o build/thymelab-vscode-%npm_package_version%.vsix"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "minimatch": "^3.1.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/axios": "^0.14.4",
+    "@types/glob": "^7.2.0",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^16.0.0",
+    "@types/vscode": "^1.80.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.57.1",
+    "glob": "^7.1.7",
+    "globals": "^15.14.0",
+    "mocha": "^10.3.0",
+    "rimraf": "^5.0.5",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.0.0",
+    "typescript-eslint": "^8.18.2",
+    "webpack": "^5.0.0",
+    "webpack-cli": "^6.0.1"
+  }
+}
