@@ -184,10 +184,12 @@ export class ProcessManager {
             }
 
             const releasesResponse = await axios.get<GitHubRelease[]>('https://api.github.com/repos/thkwag/thymelab/releases');
-            const releases: Release[] = releasesResponse.data.map((release: GitHubRelease) => ({
-                version: release.tag_name.replace(/^v/, ''),
-                name: release.name || release.tag_name
-            }));
+            const releases: Release[] = releasesResponse.data
+                .slice(0, 10) // Get only the latest 10 releases
+                .map((release: GitHubRelease) => ({
+                    version: release.tag_name.replace(/^v/, ''),
+                    name: release.name || release.tag_name
+                }));
 
             // Let user select version
             const selected = await vscode.window.showQuickPick(
@@ -196,7 +198,10 @@ export class ProcessManager {
                     description: `Version ${r.version}`,
                     version: r.version
                 })),
-                { placeHolder: 'Select version to download' }
+                { 
+                    placeHolder: 'Select version to download',
+                    title: 'Select ThymeLab Processor Version (Latest 10 Releases)'
+                }
             );
 
             if (!selected) {
