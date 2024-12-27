@@ -2,7 +2,7 @@
   "name": "thymelab-vscode",
   "displayName": "ThymeLab",
   "description": "Instantly preview and test your Thymeleaf templates without setting up a Spring Boot application",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "repository": {
     "type": "git",
     "url": "https://github.com/thkwag/thymelab-vscode.git"
