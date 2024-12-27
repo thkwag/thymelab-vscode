@@ -4,6 +4,13 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      force_latest:
+        description: 'Force update latest version'
+        required: true
+        type: boolean
+        default: true
 
 permissions:
   contents: write  # Add write permission for releases
@@ -16,19 +23,36 @@ jobs:
         with:
           fetch-depth: 0
       
+      - name: Get latest version
+        id: latest_version
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+      
+      - name: Set version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ steps.latest_version.outputs.tag }}"
+          else
+            VERSION="${{ github.ref_name }}"
+          fi
+          echo "value=$VERSION" >> $GITHUB_OUTPUT
+          echo "RELEASE_VERSION=$VERSION" >> $GITHUB_ENV
+      
       - name: Validate tag format
         run: |
-          if [[ ! ${{ github.ref_name }} =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Invalid tag format. Must be in format v1.2.3"
+          if [[ ! $RELEASE_VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version format. Must be in format v1.2.3"
             exit 1
           fi
       
       - name: Check version match
         run: |
-          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          VERSION=${RELEASE_VERSION#v}
           PKG_VERSION=$(node -p "require('./package.json').version")
-          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
-            echo "Version mismatch: Tag version ($TAG_VERSION) does not match package.json version ($PKG_VERSION)"
+          if [ "$VERSION" != "$PKG_VERSION" ]; then
+            echo "Version mismatch: Release version ($VERSION) does not match package.json version ($PKG_VERSION)"
             exit 1
           fi
       
@@ -50,7 +74,7 @@ jobs:
         
       - name: Package extension
         shell: bash
-        run: vsce package -o "build/thymelab-vscode-${GITHUB_REF_NAME#v}.vsix"
+        run: vsce package -o "build/thymelab-vscode-${RELEASE_VERSION#v}.vsix"
 
       - name: Get Changes
         id: get_changes
@@ -70,18 +94,21 @@ jobs:
 
       - name: Release
         uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.force_latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: build/thymelab-vscode-*.vsix
           generate_release_notes: true
-          name: ThymeLab VSCode ${{ github.ref_name }}
+          name: ThymeLab VSCode ${{ steps.version.outputs.value }}
+          tag_name: ${{ steps.version.outputs.value }}
           body: |
-            ## ThymeLab VSCode Extension ${{ github.ref_name }}
+            ## ThymeLab VSCode Extension ${{ steps.version.outputs.value }}
 
             ### Installation Instructions
 
             #### Method 1: Install from VSIX
-            1. Download the `thymelab-vscode-${{ github.ref_name }}.vsix` file from this release
+            1. Download the `thymelab-vscode-${{ steps.version.outputs.value }}.vsix` file from this release
             2. Open VS Code
             3. Go to Extensions view (Ctrl+Shift+X)
             4. Click on the '...' menu (Views and More Actions)
@@ -90,10 +117,8 @@ jobs:
 
             #### Method 2: Command Line Installation
             ```bash
-            code --install-extension thymelab-vscode-${{ github.ref_name }}.vsix
+            code --install-extension thymelab-vscode-${{ steps.version.outputs.value }}.vsix
             ```
 
             ### What's Changed
-            ${{ steps.get_changes.outputs.changes }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+            ${{ steps.get_changes.outputs.changes }} 
