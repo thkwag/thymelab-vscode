@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ServerManager } from './serverManager';
 import { ServerTreeDataProvider, ServerTreeItem } from './serverTreeDataProvider';
 import { ResourcesTreeDataProvider } from './resourcesTreeDataProvider';
+import { ServerState } from './serverState';
 
 let serverManager: ServerManager;
 
@@ -159,7 +160,28 @@ export async function activate(context: vscode.ExtensionContext) {
 
         vscode.commands.registerCommand('thymelab.selectTemplateDir', () => selectDirectory('Select Template Directory', 'templatePath')),
         vscode.commands.registerCommand('thymelab.selectStaticDir', () => selectDirectory('Select Static Directory', 'staticPath')),
-        vscode.commands.registerCommand('thymelab.selectDataDir', () => selectDirectory('Select Data Directory', 'dataPath'))
+        vscode.commands.registerCommand('thymelab.selectDataDir', () => selectDirectory('Select Data Directory', 'dataPath')),
+
+        vscode.commands.registerCommand('thymelab.updateProcessor', async () => {
+            try {
+                const isRunning = serverManager.getState() === ServerState.Running;
+                if (isRunning) {
+                    await serverManager.stop();
+                }
+                await serverManager.downloadJar(true);
+                if (isRunning) {
+                    vscode.window.showInformationMessage('ThymeLab Processor has been updated. Would you like to restart the server?', 'Start').then(selection => {
+                        if (selection === 'Start') {
+                            serverManager.start();
+                        }
+                    });
+                } else {
+                    vscode.window.showInformationMessage('ThymeLab Processor has been updated.');
+                }
+            } catch (error) {
+                vscode.window.showErrorMessage(`Update failed: ${error}`);
+            }
+        })
     );
 }
 

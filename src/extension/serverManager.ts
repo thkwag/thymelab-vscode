@@ -80,4 +80,8 @@ export class ServerManager {
             dataPath: resourcesConfig.get<string>('dataPath', '')
         };
     }
+
+    async downloadJar(isUpdate: boolean = false): Promise<string> {
+        return this.processManager.downloadJar(isUpdate);
+    }
 } 

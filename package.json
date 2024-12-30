@@ -126,6 +126,12 @@
         "title": "Select Data Directory",
         "category": "ThymeLab",
         "icon": "$(folder)"
+      },
+      {
+        "command": "thymelab.updateProcessor",
+        "title": "Update Processor",
+        "category": "ThymeLab",
+        "icon": "$(cloud-download)"
       }
     ],
     "menus": {
