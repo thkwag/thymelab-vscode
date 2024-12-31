@@ -36,6 +36,10 @@
 - 📊 **JSON Data**: Test templates with JSON test data
 - 🎨 **Static Resources**: Serve CSS, JS, images, and more
 - 📁 **Layout System**: Support for Thymeleaf layout system
+- 🔍 **Variable Intellisense**: Auto-completion for Thymeleaf variables from JSON data
+- 🛠️ **Resource Management**: Create, rename, delete files and folders directly in ThymeLab panel
+- 🔄 **Auto Updates**: Automatic processor updates with notifications
+- 🔗 **Fragment Navigation**: Control-click on fragments to jump to their definitions
 
 ## 🚀 Getting Started
 
@@ -75,11 +79,46 @@
 - **Log Level**: Current log level (click gear icon to change)
 - **URL**: Server URL (click browser icon for internal, external link icon for external browser)
 
+### Resources Panel
+- **Templates**: Thymeleaf template files (.html)
+- **Static Files**: Static resources (CSS, JS, images)
+- **Data Files**: JSON data for template variables
+- **File Operations**: Create, rename, delete files and folders
+- **Auto Refresh**: Automatically updates when files change
+
 ### Server Controls
 - **Start**: Start server (available when stopped)
 - **Stop**: Stop server (available when running)
 - **Restart**: Restart server (available when running)
 - **Refresh**: Refresh view (always available)
+
+## 📁 Intellisense Features
+
+### Thymeleaf Variables
+- Auto-completion for variables defined in JSON data files
+- Shows variable type and source information
+- Supports nested objects and arrays
+- Updates automatically when JSON files change
+
+### Template Syntax
+- Full Thymeleaf syntax highlighting
+- Expression completion
+- Attribute suggestions
+
+### Fragment Navigation
+- Control-click on `th:fragment` references to jump to definition
+- Supports both `~{template :: fragment}` and `~{::fragment}` syntax
+- Auto-completion for available fragments
+- Shows fragment preview on hover
+- Works across all template files in workspace
+
+## 🔄 Auto Updates
+
+- Automatic processor version check
+- Update notifications in status bar
+- One-click update process
+- Shows latest 10 versions for selection
+- Automatic download and installation
 
 ## 📁 Directory Structure
 
