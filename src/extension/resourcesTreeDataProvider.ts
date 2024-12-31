@@ -14,11 +14,19 @@ export class ResourceTreeItem extends vscode.TreeItem {
         this.description = description || '';
         this.command = command;
         this.contextValue = contextValue;
-        this.iconPath = new vscode.ThemeIcon(isDirectory ? 'folder' : 'file');
+        
+        // Show warning icon for unselected folders
+        if (isDirectory && !resourcePath) {
+            this.iconPath = new vscode.ThemeIcon('warning');
+        } else {
+            this.iconPath = new vscode.ThemeIcon(isDirectory ? 'folder' : 'file');
+        }
         
         if (resourcePath) {
             this.tooltip = resourcePath;
             this.resourceUri = vscode.Uri.file(resourcePath);
+        } else if (isDirectory) {
+            this.tooltip = 'Folder not selected';
         }
     }
 }

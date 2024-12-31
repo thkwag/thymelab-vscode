@@ -19,8 +19,33 @@ export class ServerManager {
         vscode.commands.executeCommand('thymelab.refreshServer');
     }
 
+    private validateRequiredDirectories(): string[] {
+        const config = this.getConfig();
+        const missingDirs = [];
+        
+        if (!config.templatePath) {
+            missingDirs.push('Templates');
+        }
+        if (!config.staticPath) {
+            missingDirs.push('Static Files');
+        }
+        if (!config.dataPath) {
+            missingDirs.push('Data Files');
+        }
+        
+        return missingDirs;
+    }
+
     async start(): Promise<void> {
         try {
+            const missingDirs = this.validateRequiredDirectories();
+            if (missingDirs.length > 0) {
+                await vscode.window.showInformationMessage(
+                    `Please select the following directories to start the server: ${missingDirs.join(', ')}`
+                );
+                return;
+            }
+
             this.outputChannel.show();
             await this.setState(ServerState.Starting);
             await this.processManager.startServer();
@@ -43,6 +68,16 @@ export class ServerManager {
             await this.setState(ServerState.Starting);
             await this.processManager.stopServer();
             await new Promise(resolve => setTimeout(resolve, 1000));
+
+            const missingDirs = this.validateRequiredDirectories();
+            if (missingDirs.length > 0) {
+                await this.setState(ServerState.Stopped);
+                await vscode.window.showInformationMessage(
+                    `Please select the following directories to restart the server: ${missingDirs.join(', ')}`
+                );
+                return;
+            }
+
             await this.processManager.startServer();
             await this.setState(ServerState.Running);
         } catch (error) {
