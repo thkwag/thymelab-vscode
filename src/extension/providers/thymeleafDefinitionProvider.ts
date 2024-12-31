@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { ThymeleafDefinitionParser } from './thymeleafDefinitionParser';
+import { ThymeleafDefinitionParser } from '../parsers/thymeleafDefinitionParser';
 
 interface FragmentDefinition {
     file: vscode.Uri;

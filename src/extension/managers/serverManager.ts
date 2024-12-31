@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { ProcessManager } from './processManager';
-import { ServerState } from './serverState';
+import { ServerState } from '../types/serverState';
 import { existsSync } from 'fs';
 
 export class ServerManager {

@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
-import { ServerManager } from './serverManager';
-import { ServerTreeDataProvider, ServerTreeItem } from './serverTreeDataProvider';
-import { ResourcesTreeDataProvider } from './resourcesTreeDataProvider';
-import { ThymeleafDefinitionProvider } from './thymeleafDefinitionProvider';
-import { ThymeleafVariableProvider } from './thymeleafVariableProvider';
+import { ServerManager } from './managers/serverManager';
+import { ServerTreeDataProvider, ServerTreeItem } from './providers/serverTreeDataProvider';
+import { ResourcesTreeDataProvider } from './providers/resourcesTreeDataProvider';
+import { ThymeleafDefinitionProvider } from './providers/thymeleafDefinitionProvider';
+import { ThymeleafVariableProvider } from './providers/thymeleafVariableProvider';
 
 let serverManager: ServerManager;
 

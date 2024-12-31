@@ -1,5 +1,5 @@
 import { describe, test, expect } from '@jest/globals';
-import { ThymeleafVariableParser } from '../../extension/thymeleafVariableParser';
+import { ThymeleafVariableParser } from '../../../extension/parsers/thymeleafVariableParser';
 
 describe('ThymeleafVariableParser - Variable Detection', () => {
     let parser: ThymeleafVariableParser;

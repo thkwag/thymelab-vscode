@@ -1,4 +1,4 @@
-import { ThymeleafDefinitionParser } from '../../extension/thymeleafDefinitionParser';
+import { ThymeleafDefinitionParser } from '../../../extension/parsers/thymeleafDefinitionParser';
 
 describe('ThymeleafDefinitionParser', () => {
     let parser: ThymeleafDefinitionParser;

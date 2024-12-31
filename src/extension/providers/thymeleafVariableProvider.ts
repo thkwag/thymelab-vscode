@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ThymeleafVariableParser } from './thymeleafVariableParser';
+import { ThymeleafVariableParser } from '../parsers/thymeleafVariableParser';
 
 type JsonObject = { [key: string]: JsonValue };
 type JsonValue = string | number | boolean | null | JsonObject | JsonValue[];

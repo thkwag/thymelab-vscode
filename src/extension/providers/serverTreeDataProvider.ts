@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import { ServerState } from './serverState';
-import { ServerManager } from './serverManager';
+import { ServerState } from '../types/serverState';
+import { ServerManager } from '../managers/serverManager';
 
 export class ServerTreeItem extends vscode.TreeItem {
     constructor(
