@@ -146,6 +146,12 @@ export class ThymeleafVariableProvider implements vscode.DefinitionProvider, vsc
             const endIndex = startIndex + variable.length;
             
             if (position.character >= startIndex && position.character <= endIndex) {
+                // Skip variables starting with 'req'
+                const parts = variable.split('.');
+                if (parts[0].startsWith('req')) {
+                    continue;
+                }
+                
                 const variableDef = await this.findVariableDefinition(variable);
                 if (variableDef) {
                     return variableDef;
@@ -466,7 +472,7 @@ export class ThymeleafVariableProvider implements vscode.DefinitionProvider, vsc
             const document = await vscode.workspace.openTextDocument(pathInfo.targetFile);
             await vscode.window.showTextDocument(document, { preview: false });
 
-            vscode.window.showInformationMessage('All variables have been processed.');
+            vscode.window.showInformationMessage('All thymeleaf variables have been processed.');
         } catch (error) {
             console.error('Error updating JSON file:', error);
             vscode.window.showErrorMessage('Failed to process variables.');
@@ -479,6 +485,11 @@ export class ThymeleafVariableProvider implements vscode.DefinitionProvider, vsc
 
         for (const [, variable] of matches) {
             const parts = variable.split('.');
+            
+            // Skip variables starting with 'req'
+            if (parts[0].startsWith('req')) {
+                continue;
+            }
             
             if (iteratorMap.has(parts[0])) {
                 allVariables.add(iteratorMap.get(parts[0])!);
@@ -493,6 +504,12 @@ export class ThymeleafVariableProvider implements vscode.DefinitionProvider, vsc
     private async processVariables(json: JsonObject, variables: Set<string>, text: string, iteratorMap: Map<string, string>) {
         for (const variable of variables) {
             const parts = variable.split('.');
+            
+            // Skip variables starting with 'req'
+            if (parts[0].startsWith('req')) {
+                continue;
+            }
+            
             const iteratorVar = [...iteratorMap.entries()].find(([, v]) => v === variable)?.[0];
             
             if (iteratorVar) {
