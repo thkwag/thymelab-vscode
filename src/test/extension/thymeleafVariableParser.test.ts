@@ -159,26 +159,6 @@ describe('ThymeleafVariableParser - Variable Detection', () => {
         });
     });
 
-    describe('Nested Expressions', () => {
-        // Remove this section as it's now part of Expression Handling
-    });
-
-    describe('Mixed Expressions', () => {
-        // Remove this section as it's now part of Expression Handling
-    });
-
-    describe('Special Thymeleaf Attributes', () => {
-        // Remove this section as it's now part of Expression Handling
-    });
-
-    describe('Mixed Expression Types', () => {
-        // Remove this section as it's now part of Expression Handling
-    });
-
-    describe('Advanced Utility Methods', () => {
-        // Remove this section as it's now part of Expression Handling
-    });
-
     describe('Selection Variable Expressions', () => {
         it('should handle array selection', () => {
             const line = '<div th:each="user : ${users.?[age > 18]}">';
