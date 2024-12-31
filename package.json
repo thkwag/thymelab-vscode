@@ -138,6 +138,30 @@
         "title": "Generate Thymeleaf Variables",
         "category": "ThymeLab",
         "icon": "$(symbol-variable)"
+      },
+      {
+        "command": "thymelab.resources.createFile",
+        "title": "New File",
+        "category": "ThymeLab",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "thymelab.resources.createFolder",
+        "title": "New Folder",
+        "category": "ThymeLab",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "thymelab.resources.rename",
+        "title": "Rename",
+        "category": "ThymeLab",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "thymelab.resources.delete",
+        "title": "Delete",
+        "category": "ThymeLab",
+        "icon": "$(trash)"
       }
     ],
     "menus": {
@@ -176,6 +200,26 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "thymelab.resources.createFile",
+          "when": "view == thymelab-resources && viewItem =~ /directory|template-dir|static-dir|data-dir/",
+          "group": "1_modification"
+        },
+        {
+          "command": "thymelab.resources.createFolder",
+          "when": "view == thymelab-resources && viewItem =~ /directory|template-dir|static-dir|data-dir/",
+          "group": "1_modification"
+        },
+        {
+          "command": "thymelab.resources.rename",
+          "when": "view == thymelab-resources && viewItem =~ /file|directory/",
+          "group": "2_modification"
+        },
+        {
+          "command": "thymelab.resources.delete",
+          "when": "view == thymelab-resources && viewItem =~ /file|directory/",
+          "group": "2_modification"
+        },
         {
           "command": "thymelab.setPort",
           "when": "view == thymelab-server && viewItem == server-port",
