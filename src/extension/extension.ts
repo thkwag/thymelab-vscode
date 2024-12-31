@@ -2,7 +2,8 @@ import * as vscode from 'vscode';
 import { ServerManager } from './serverManager';
 import { ServerTreeDataProvider, ServerTreeItem } from './serverTreeDataProvider';
 import { ResourcesTreeDataProvider } from './resourcesTreeDataProvider';
-import { ServerState } from './serverState';
+import { ThymeleafDefinitionProvider } from './thymeleafDefinitionProvider';
+import { ThymeleafVariableProvider } from './thymeleafVariableProvider';
 
 let serverManager: ServerManager;
 
@@ -55,6 +56,29 @@ export async function activate(context: vscode.ExtensionContext) {
             resourcesTreeDataProvider.refresh();
         }
     }
+
+    // Register Thymeleaf Fragment Definition Provider
+    const provider = new ThymeleafDefinitionProvider();
+    context.subscriptions.push(
+        vscode.languages.registerDefinitionProvider({ scheme: 'file', language: 'html' }, provider),
+        vscode.languages.registerDocumentLinkProvider({ scheme: 'file', language: 'html' }, provider)
+    );
+
+    // Register Thymeleaf variable provider
+    const variableProvider = new ThymeleafVariableProvider();
+    context.subscriptions.push(
+        vscode.languages.registerDefinitionProvider(
+            { scheme: 'file', language: 'html' },
+            variableProvider
+        ),
+        vscode.languages.registerCodeLensProvider(
+            { scheme: 'file', language: 'html' },
+            variableProvider
+        ),
+        vscode.commands.registerCommand('thymelab.processAllVariables', () => {
+            variableProvider.processAllVariables();
+        })
+    );
 
     context.subscriptions.push(
         vscode.window.registerTreeDataProvider('thymelab-server', serverTreeDataProvider),
@@ -162,25 +186,8 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('thymelab.selectStaticDir', () => selectDirectory('Select Static Directory', 'staticPath')),
         vscode.commands.registerCommand('thymelab.selectDataDir', () => selectDirectory('Select Data Directory', 'dataPath')),
 
-        vscode.commands.registerCommand('thymelab.updateProcessor', async () => {
-            try {
-                const isRunning = serverManager.getState() === ServerState.Running;
-                if (isRunning) {
-                    await serverManager.stop();
-                }
-                await serverManager.downloadJar(true);
-                if (isRunning) {
-                    vscode.window.showInformationMessage('ThymeLab Processor has been updated. Would you like to restart the server?', 'Start').then(selection => {
-                        if (selection === 'Start') {
-                            serverManager.start();
-                        }
-                    });
-                } else {
-                    vscode.window.showInformationMessage('ThymeLab Processor has been updated.');
-                }
-            } catch (error) {
-                vscode.window.showErrorMessage(`Update failed: ${error}`);
-            }
+        vscode.commands.registerCommand('thymelab.updateProcessor', async (showNotification: () => Promise<void>) => {
+            await showNotification();
         })
     );
 }

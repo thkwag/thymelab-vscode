@@ -7,81 +7,68 @@
             "include": "#thymeleaf-expression"
         },
         {
+            "include": "#thymeleaf-inline"
+        },
+        {
             "include": "text.html.basic"
         }
     ],
     "repository": {
-        "thymeleaf-expression": {
+        "thymeleaf-inline": {
             "patterns": [
                 {
-                    "name": "meta.tag.thymeleaf",
-                    "match": "(th:)([a-zA-Z][a-zA-Z0-9-]*)",
-                    "captures": {
-                        "1": { "name": "entity.other.attribute-name.thymeleaf.prefix" },
-                        "2": { "name": "entity.other.attribute-name.thymeleaf.attribute" }
-                    }
-                },
-                {
-                    "name": "string.quoted.thymeleaf",
-                    "begin": "\\$\\{",
-                    "end": "\\}",
+                    "name": "meta.inline.expression.thymeleaf",
+                    "begin": "\\[(?:\\[|\\|)",
+                    "end": "(?:\\]\\]|\\|\\])",
                     "patterns": [
                         {
-                            "name": "variable.other.thymeleaf",
-                            "match": "[a-zA-Z][a-zA-Z0-9._]*"
+                            "include": "#thymeleaf-expression-content"
+                        }
+                    ]
+                }
+            ]
+        },
+        "thymeleaf-expression-content": {
+            "patterns": [
+                {
+                    "begin": "[~$*@#]\\{",
+                    "end": "\\}",
+                    "name": "string.quoted.thymeleaf.expression",
+                    "patterns": [
+                        {
+                            "name": "support.function.thymeleaf",
+                            "match": "#\\w+"
                         },
                         {
                             "name": "keyword.operator.thymeleaf",
-                            "match": "\\b(and|or|not|gt|lt|ge|le|eq|ne)\\b"
+                            "match": "[+\\-*/%^|&=!<>?:.,]+"
                         },
                         {
                             "name": "constant.numeric.thymeleaf",
-                            "match": "\\b\\d+(\\.\\d+)?\\b"
+                            "match": "\\d+(?:\\.\\d+)?"
                         },
                         {
-                            "name": "string.quoted.single.thymeleaf",
-                            "begin": "'",
-                            "end": "'",
-                            "patterns": [
-                                {
-                                    "name": "constant.character.escape.thymeleaf",
-                                    "match": "\\\\."
-                                }
-                            ]
+                            "name": "string.quoted.thymeleaf",
+                            "match": "'[^']*'|\"[^\"]*\""
                         },
                         {
-                            "name": "string.quoted.double.thymeleaf",
-                            "begin": "\"",
-                            "end": "\"",
-                            "patterns": [
-                                {
-                                    "name": "constant.character.escape.thymeleaf",
-                                    "match": "\\\\."
-                                }
-                            ]
+                            "name": "variable.other.object.thymeleaf",
+                            "match": "\\b\\w+(?:\\.\\w+)*\\b"
                         }
                     ]
-                },
+                }
+            ]
+        },
+        "thymeleaf-expression": {
+            "patterns": [
                 {
-                    "name": "string.quoted.thymeleaf",
-                    "begin": "\\*\\{",
-                    "end": "\\}",
-                    "patterns": [
-                        {
-                            "include": "#thymeleaf-expression.patterns"
-                        }
-                    ]
-                },
-                {
-                    "name": "string.quoted.thymeleaf",
-                    "begin": "@\\{",
-                    "end": "\\}",
-                    "patterns": [
-                        {
-                            "name": "string.unquoted.thymeleaf",
-                            "match": "[^{}]+"
-                        }
-                    ]
+                    "name": "meta.attribute.thymeleaf",
+                    "match": "((?:th:|data-th-)\\w+)(\\s*=\\s*)(\"[^\"]*\"|'[^']*')?",
+                    "captures": {
+                        "1": { "name": "entity.other.attribute-name.thymeleaf" },
+                        "2": { "name": "punctuation.separator.key-value.thymeleaf" },
+                        "3": { "name": "string.quoted.thymeleaf" }
+                    }
                 }
             ]
         }

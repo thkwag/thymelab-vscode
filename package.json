@@ -132,6 +132,12 @@
         "title": "Update Processor",
         "category": "ThymeLab",
         "icon": "$(cloud-download)"
+      },
+      {
+        "command": "thymelab.generateVariablesButton",
+        "title": "Generate Thymeleaf Variables",
+        "category": "ThymeLab",
+        "icon": "$(symbol-variable)"
       }
     ],
     "menus": {
@@ -267,14 +273,49 @@
           "scope": "workspace"
         }
       }
-    }
+    },
+    "languages": [
+      {
+        "id": "thymeleaf",
+        "aliases": [
+          "Thymeleaf",
+          "thymeleaf"
+        ],
+        "extensions": [
+          ".html"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "html",
+        "extensions": [
+          ".html"
+        ],
+        "aliases": [
+          "HTML",
+          "html"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "thymeleaf",
+        "scopeName": "text.html.thymeleaf",
+        "path": "./syntaxes/thymeleaf.tmLanguage.json",
+        "embeddedLanguages": {
+          "text.html.basic": "html"
+        }
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./ && webpack --config webpack.config.js",
     "watch": "tsc -watch -p ./",
     "lint": "eslint src --ext ts",
-    "package": "node scripts/build-vsix.js"
+    "package": "node scripts/build-vsix.js",
+    "test": "jest"
   },
   "dependencies": {
     "axios": "^1.7.9",
@@ -282,8 +323,10 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
+    "@jest/globals": "^29.7.0",
     "@types/axios": "^0.14.4",
     "@types/glob": "^7.2.0",
+    "@types/jest": "^29.5.14",
     "@types/mocha": "^10.0.6",
     "@types/node": "^16.0.0",
     "@types/vscode": "^1.80.0",
@@ -293,9 +336,11 @@
     "eslint": "^8.57.1",
     "glob": "^7.1.7",
     "globals": "^15.14.0",
+    "jest": "^29.7.0",
     "make-dir-cli": "^4.0.0",
     "mocha": "^10.3.0",
     "rimraf": "^5.0.5",
+    "ts-jest": "^29.2.5",
     "ts-loader": "^9.5.1",
     "typescript": "^5.0.0",
     "typescript-eslint": "^8.18.2",

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ProcessManager } from './processManager';
 import { ServerState } from './serverState';
+import { existsSync } from 'fs';
 
 export class ServerManager {
     private processManager: ProcessManager;
@@ -38,6 +39,14 @@ export class ServerManager {
 
     async start(): Promise<void> {
         try {
+            // Check JAR file first
+            const config = this.getConfig();
+            if (!config.jarPath || !existsSync(config.jarPath)) {
+                await this.processManager.downloadJar();
+                return;
+            }
+
+            // Then check directories
             const missingDirs = this.validateRequiredDirectories();
             if (missingDirs.length > 0) {
                 await vscode.window.showInformationMessage(
