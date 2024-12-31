@@ -96,8 +96,7 @@ export class ThymeleafVariableProvider implements vscode.DefinitionProvider, vsc
         // Check if the file is a fragment or layout
         const content = document.getText();
         const isFragment = content.includes('th:fragment');
-        const isLayout = content.includes('layout:fragment') || content.includes('layout:decorate');
-        const shouldUseGlobalJson = isFragment || isLayout;
+        const shouldUseGlobalJson = isFragment;
 
         let jsonPath;
         if (shouldUseGlobalJson) {
