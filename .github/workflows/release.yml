@@ -1,19 +1,15 @@
-name: Release Extension
+name: Release Extension(Manual)
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
-      force_latest:
-        description: 'Force update latest version'
+      version:
+        description: 'Release version (e.g. 1.0.0)'
         required: true
-        type: boolean
-        default: true
+        type: string
 
 permissions:
-  contents: write  # Add write permission for releases
+  contents: write
 
 jobs:
   release:
@@ -23,36 +19,55 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: Get latest version
-        id: latest_version
+      - name: Setup Git
         run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
       
-      - name: Set version
-        id: version
+      - name: Validate version format
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            VERSION="${{ steps.latest_version.outputs.tag }}"
-          else
-            VERSION="${{ github.ref_name }}"
-          fi
-          echo "value=$VERSION" >> $GITHUB_OUTPUT
-          echo "RELEASE_VERSION=$VERSION" >> $GITHUB_ENV
-      
-      - name: Validate tag format
-        run: |
-          if [[ ! $RELEASE_VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Invalid version format. Must be in format v1.2.3"
+          if [[ ! ${{ github.event.inputs.version }} =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version format. Must be in format x.y.z"
             exit 1
           fi
       
-      - name: Check version match
+      - name: Compare versions
+        id: version_check
         run: |
-          VERSION=${RELEASE_VERSION#v}
+          CURRENT_VERSION=$(node -p "require('./package.json').version.replace(/-snapshot$/, '')")
+          NEW_VERSION="${{ github.event.inputs.version }}"
+          
+          if ! dpkg --compare-versions "$NEW_VERSION" ge "$CURRENT_VERSION"; then
+            echo "New version ($NEW_VERSION) must be greater than or equal to current version ($CURRENT_VERSION)"
+            exit 1
+          fi
+      
+      - name: Update package.json version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" package.json
+          git add package.json
+          git commit -m "chore: update version to $VERSION"
+          git push
+      
+      - name: Create and push tag
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          TAG_NAME="v$VERSION"
+          
+          # Check if tag exists
+          if ! git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            git tag "$TAG_NAME"
+            git push origin "$TAG_NAME"
+          else
+            echo "Tag $TAG_NAME already exists, reusing it"
+          fi
+      
+      - name: Verify version match
+        run: |
           PKG_VERSION=$(node -p "require('./package.json').version")
-          if [ "$VERSION" != "$PKG_VERSION" ]; then
-            echo "Version mismatch: Release version ($VERSION) does not match package.json version ($PKG_VERSION)"
+          if [ "${{ github.event.inputs.version }}" != "$PKG_VERSION" ]; then
+            echo "Version mismatch: Input version (${{ github.event.inputs.version }}) does not match package.json version ($PKG_VERSION)"
             exit 1
           fi
       
@@ -64,7 +79,6 @@ jobs:
         run: npm ci
         
       - name: Prepare build directory
-        shell: bash
         run: |
           rm -rf build
           mkdir -p build
@@ -73,42 +87,37 @@ jobs:
         run: npm install -g @vscode/vsce
         
       - name: Package extension
-        shell: bash
-        run: vsce package -o "build/thymelab-vscode-${RELEASE_VERSION#v}.vsix"
+        run: vsce package -o "build/thymelab-vscode-${{ github.event.inputs.version }}.vsix"
 
       - name: Get Changes
         id: get_changes
         run: |
-          # Get the previous tag
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           if [ -z "$PREV_TAG" ]; then
-            # If no previous tag exists, get all commits
             CHANGES=$(git log --pretty=format:"- %s")
           else
-            # Get commits between tags
             CHANGES=$(git log --pretty=format:"- %s" ${PREV_TAG}..HEAD)
           fi
           echo "changes<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Release
+      - name: Create Release
         uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.force_latest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: build/thymelab-vscode-*.vsix
           generate_release_notes: true
-          name: ThymeLab VSCode ${{ steps.version.outputs.value }}
-          tag_name: ${{ steps.version.outputs.value }}
+          name: ThymeLab VSCode v${{ github.event.inputs.version }}
+          tag_name: v${{ github.event.inputs.version }}
           body: |
-            ## ThymeLab VSCode Extension ${{ steps.version.outputs.value }}
+            ## ThymeLab VSCode Extension v${{ github.event.inputs.version }}
 
             ### Installation Instructions
 
             #### Method 1: Install from VSIX
-            1. Download the `thymelab-vscode-${{ steps.version.outputs.value }}.vsix` file from this release
+            1. Download the `thymelab-vscode-${{ github.event.inputs.version }}.vsix` file from this release
             2. Open VS Code
             3. Go to Extensions view (Ctrl+Shift+X)
             4. Click on the '...' menu (Views and More Actions)
@@ -117,8 +126,19 @@ jobs:
 
             #### Method 2: Command Line Installation
             ```bash
-            code --install-extension thymelab-vscode-${{ steps.version.outputs.value }}.vsix
+            code --install-extension thymelab-vscode-${{ github.event.inputs.version }}.vsix
             ```
 
             ### What's Changed
-            ${{ steps.get_changes.outputs.changes }} 
+            ${{ steps.get_changes.outputs.changes }}
+      
+      - name: Update to next snapshot version
+        run: |
+          CURRENT_VERSION="${{ github.event.inputs.version }}"
+          # Increment the last number and add -snapshot
+          NEW_VERSION=$(echo $CURRENT_VERSION | awk -F. '{$NF = $NF + 1;} 1' OFS=.)-snapshot
+          
+          sed -i "s/\"version\": \".*\"/\"version\": \"$NEW_VERSION\"/" package.json
+          git add package.json
+          git commit -m "chore: update version to $NEW_VERSION"
+          git push 
