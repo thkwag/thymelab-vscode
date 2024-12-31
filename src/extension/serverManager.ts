@@ -11,6 +11,27 @@ export class ServerManager {
     constructor(context: vscode.ExtensionContext) {
         this.outputChannel = vscode.window.createOutputChannel('ThymeLab Processor');
         this.processManager = new ProcessManager(this.outputChannel, context);
+
+        // Add configuration change listener for auto update
+        context.subscriptions.push(
+            vscode.workspace.onDidChangeConfiguration(e => {
+                if (e.affectsConfiguration('thymelab.processor.autoUpdate')) {
+                    this.checkForUpdates();
+                }
+            })
+        );
+
+        // Initial update check
+        this.checkForUpdates();
+    }
+
+    private async checkForUpdates(): Promise<void> {
+        const config = vscode.workspace.getConfiguration('thymelab.processor');
+        const autoUpdate = config.get<boolean>('autoUpdate', true);
+        
+        if (autoUpdate) {
+            await this.processManager.checkForUpdates();
+        }
     }
 
     private async setState(state: ServerState): Promise<void> {

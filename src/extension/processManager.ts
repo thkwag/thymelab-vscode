@@ -38,6 +38,7 @@ export class ProcessManager {
             case 'javaHome':
             case 'port':
             case 'logLevel':
+            case 'autoUpdate':
                 return processorConfig.get<T>(key, defaultValue as T) as T;
             case 'templatePath':
             case 'staticPath':
@@ -267,6 +268,9 @@ export class ProcessManager {
                 throw new Error('Server is already running');
             }
 
+            // Check for updates before starting server
+            await this.checkForUpdates();
+
             const jarPath = await this.downloadJar();
             const args = [
                 '-Dserver.port=' + this.port,
@@ -345,17 +349,26 @@ export class ProcessManager {
     }
 
     private async showUpdateNotification(version: string): Promise<void> {
+        // Don't show update notification if server is running
+        if (this.process) {
+            return;
+        }
+
         const selection = await vscode.window.showInformationMessage(
             `ThymeLab Processor update available: ${version}`,
-            'Update'
+            'Update',
+            'Later'
         );
         if (selection === 'Update') {
             await this.downloadJar(true);
             this.statusBarItem.hide();
+        } else if (selection === 'Later') {
+            this.statusBarItem.show(); // Keep the status bar item visible for later
         }
     }
 
-    private async checkForUpdates(): Promise<void> {
+    async checkForUpdates(): Promise<void> {
+        // Don't check for updates if server is running
         if (this.process) {
             return;
         }
@@ -363,6 +376,13 @@ export class ProcessManager {
         try {
             const jarPath = this.getConfig<string>('jarPath');
             if (!jarPath) return;
+
+            // Check if auto update is enabled
+            const autoUpdate = this.getConfig<boolean>('autoUpdate', true);
+            if (!autoUpdate) {
+                this.statusBarItem.hide(); // Hide update notification if auto update is disabled
+                return;
+            }
 
             const currentVersion = jarPath.match(/thymelab-processor-([\d.]+)\.jar$/)?.[1];
             if (!currentVersion) return;
@@ -382,6 +402,8 @@ export class ProcessManager {
                 this.statusBarItem.show();
 
                 this.showUpdateNotification(latestVersion);
+            } else {
+                this.statusBarItem.hide(); // Hide if no updates available
             }
         } catch (error) {
             console.error('Failed to check for updates:', error);

@@ -186,8 +186,10 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('thymelab.selectStaticDir', () => selectDirectory('Select Static Directory', 'staticPath')),
         vscode.commands.registerCommand('thymelab.selectDataDir', () => selectDirectory('Select Data Directory', 'dataPath')),
 
-        vscode.commands.registerCommand('thymelab.updateProcessor', async (showNotification: () => Promise<void>) => {
-            await showNotification();
+        vscode.commands.registerCommand('thymelab.updateProcessor', async (callback?: () => Promise<void>) => {
+            if (callback) {
+                await callback();
+            }
         })
     );
 }

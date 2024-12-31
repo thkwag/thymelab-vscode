@@ -298,6 +298,12 @@
           "description": "Log level",
           "scope": "machine"
         },
+        "thymelab.processor.autoUpdate": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically update the processor JAR file",
+          "scope": "machine"
+        },
         "thymelab.resources.templatePath": {
           "type": "string",
           "default": "",
