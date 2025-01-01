@@ -266,13 +266,11 @@ export class ThymeleafCompletionProvider implements vscode.CompletionItemProvide
                 return name.toLowerCase().includes(prefix.toLowerCase());
             })
             .map(v => {
-                const item = new vscode.CompletionItem(
-                    v.name.includes('.') ? v.name.split('.').pop()! : v.name,
-                    this.getCompletionItemKind(v.type)
-                );
-                item.detail = `${v.type} - ${sourcePath}`;
+                const name = v.name.includes('.') ? v.name.split('.').pop()! : v.name;
+                const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Text);
+                item.detail = `(${v.type}) ${sourcePath}`;
                 item.sortText = `${sortTextPrefix}${v.name}`;
-                item.command = undefined; // Remove default click behavior
+                item.command = { command: 'editor.action.triggerSuggest', title: '' };
                 return item;
             });
     }

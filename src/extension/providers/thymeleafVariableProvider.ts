@@ -38,8 +38,7 @@ export class ThymeleafVariableProvider implements vscode.DefinitionProvider, vsc
         this.linkDecoration = vscode.window.createTextEditorDecorationType({
             textDecoration: vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark
                 ? 'underline rgba(255, 255, 255, 0.5)'  // dark theme
-                : 'underline rgba(0, 0, 0, 0.5)',       // light theme
-            cursor: 'pointer'
+                : 'underline rgba(0, 0, 0, 0.5)'       // light theme
         });
 
         // Update decorations when active editor changes
