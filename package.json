@@ -357,6 +357,17 @@
           "text.html.basic": "html"
         }
       }
+    ],
+    "colors": [
+      {
+        "id": "thymelab.variableLink",
+        "description": "Color for Thymeleaf variable links",
+        "defaults": {
+          "dark": "#6B6B6B20",
+          "light": "#00000015",
+          "highContrast": "#6B6B6B20"
+        }
+      }
     ]
   },
   "scripts": {

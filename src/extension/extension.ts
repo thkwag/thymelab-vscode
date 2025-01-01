@@ -75,6 +75,10 @@ export async function activate(context: vscode.ExtensionContext) {
             { scheme: 'file', language: 'html' },
             variableProvider
         ),
+        vscode.languages.registerDocumentLinkProvider(
+            { scheme: 'file', language: 'html' },
+            variableProvider
+        ),
         vscode.commands.registerCommand('thymelab.processAllVariables', () => {
             variableProvider.processAllVariables();
         })
@@ -191,6 +195,13 @@ export async function activate(context: vscode.ExtensionContext) {
                 await callback();
             }
         })
+    );
+
+    context.subscriptions.push(
+        vscode.languages.registerDefinitionProvider(
+            { language: 'html' },
+            new ThymeleafDefinitionProvider()
+        )
     );
 }
 

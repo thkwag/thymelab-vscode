@@ -21,17 +21,33 @@ interface PathInfo {
     targetDir: vscode.Uri;
 }
 
-export class ThymeleafVariableProvider implements vscode.DefinitionProvider, vscode.CodeLensProvider {
+export class ThymeleafVariableProvider implements vscode.DefinitionProvider, vscode.CodeLensProvider, vscode.DocumentLinkProvider {
     private variableCache: Map<string, VariableDefinition> = new Map();
     private lastCacheUpdate: number = 0;
     private readonly CACHE_TTL = 5000; // 5 seconds
     private statusBarItem!: vscode.StatusBarItem;
     private readonly parser: ThymeleafVariableParser;
+    private readonly linkDecoration: vscode.TextEditorDecorationType;
 
     constructor() {
         this.parser = new ThymeleafVariableParser();
         this.setupEventListeners();
         this.setupStatusBarItem();
+        
+        // Create persistent decoration type
+        this.linkDecoration = vscode.window.createTextEditorDecorationType({
+            textDecoration: vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark
+                ? 'underline rgba(255, 255, 255, 0.5)'  // dark theme
+                : 'underline rgba(0, 0, 0, 0.5)',       // light theme
+            cursor: 'pointer'
+        });
+
+        // Update decorations when active editor changes
+        vscode.window.onDidChangeActiveTextEditor(editor => {
+            if (editor) {
+                this.updateDecorations(editor);
+            }
+        });
     }
 
     private setupEventListeners() {
@@ -40,6 +56,13 @@ export class ThymeleafVariableProvider implements vscode.DefinitionProvider, vsc
         vscode.workspace.onDidChangeTextDocument((e) => {
             if (e.document.fileName.endsWith('.json')) {
                 this.clearCache();
+            }
+        });
+
+        // Update decorations when the active editor changes
+        vscode.window.onDidChangeActiveTextEditor(editor => {
+            if (editor) {
+                this.updateDecorations(editor);
             }
         });
     }
@@ -176,6 +199,16 @@ export class ThymeleafVariableProvider implements vscode.DefinitionProvider, vsc
         if (!pathInfo) return undefined;
 
         try {
+            // Prioritize global.json
+            const globalJsonPath = path.join(pathInfo.workspaceFolder.uri.fsPath, pathInfo.dataPath, 'global.json');
+            const globalJson = await this.readJsonFile(vscode.Uri.file(globalJsonPath));
+            const globalResult = this.searchInJson(globalJson, variable.split('.'), vscode.Uri.file(globalJsonPath));
+            if (globalResult) {
+                this.variableCache.set(variable, globalResult);
+                return globalResult;
+            }
+
+            // Fallback to specific JSON file
             const json = await this.readJsonFile(pathInfo.targetFile);
             const result = this.searchInJson(json, variable.split('.'), pathInfo.targetFile);
             if (result) {
@@ -559,6 +592,42 @@ export class ThymeleafVariableProvider implements vscode.DefinitionProvider, vsc
                 command: 'thymelab.generateVariablesButton'
             })
         ];
+    }
+
+    async provideDocumentLinks(document: vscode.TextDocument): Promise<vscode.DocumentLink[]> {
+        // Update decorations for active editor
+        if (vscode.window.activeTextEditor?.document === document) {
+            this.updateDecorations(vscode.window.activeTextEditor);
+        }
+        return [];
+    }
+
+    private async updateDecorations(editor: vscode.TextEditor) {
+        const hovers: vscode.DecorationOptions[] = [];
+        const document = editor.document;
+
+        for (let i = 0; i < document.lineCount; i++) {
+            const line = document.lineAt(i).text;
+            const references = this.findVariableReferences(line);
+
+            for (const {variable, startIndex, isIteratorVar} of references) {
+                if (isIteratorVar) continue;
+                const range = new vscode.Range(i, startIndex, i, startIndex + variable.length);
+                
+                // Find target file for the variable
+                const variableInfo = await this.findVariableDefinition(variable);
+                if (variableInfo) {
+                    const isMac = process.platform === 'darwin';
+                    const modKey = isMac ? '⌘' : 'Ctrl';
+                    hovers.push({
+                        range,
+                        hoverMessage: new vscode.MarkdownString(`Go to ${path.basename(variableInfo.file.fsPath)} (${modKey}+Click)`)
+                    });
+                }
+            }
+        }
+
+        editor.setDecorations(this.linkDecoration, hovers);
     }
 }
 
