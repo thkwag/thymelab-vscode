@@ -100,6 +100,16 @@
 - Supports nested objects and arrays
 - Updates automatically when JSON files change
 
+### Variable Auto-completion
+- Triggers on `${`, `[[${`, and `[(${` expressions
+- Shows variables from both global and template-specific JSON files
+- Supports dot notation for nested properties (e.g., `${user.name}`)
+- Auto-completes iterator variables in `th:each` loops (e.g., `${item.property}`)
+
+### Variable Navigation
+- Control-click on variables to jump to their definition in JSON files
+- Automatically creates variables in JSON files if they don't exist
+
 ### Template Syntax
 - Full Thymeleaf syntax highlighting
 - Expression completion
