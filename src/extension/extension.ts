@@ -4,6 +4,7 @@ import { ServerTreeDataProvider, ServerTreeItem } from './providers/serverTreeDa
 import { ResourcesTreeDataProvider } from './providers/resourcesTreeDataProvider';
 import { ThymeleafDefinitionProvider } from './providers/thymeleafDefinitionProvider';
 import { ThymeleafVariableProvider } from './providers/thymeleafVariableProvider';
+import { ThymeleafCompletionProvider } from './providers/thymeleafCompletionProvider';
 
 let serverManager: ServerManager;
 
@@ -82,6 +83,16 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('thymelab.processAllVariables', () => {
             variableProvider.processAllVariables();
         })
+    );
+
+    // Register Thymeleaf completion provider
+    const completionProvider = new ThymeleafCompletionProvider();
+    context.subscriptions.push(
+        vscode.languages.registerCompletionItemProvider(
+            { scheme: 'file', language: 'html' },
+            completionProvider,
+            '$', '[', '.', '{', '}'
+        )
     );
 
     context.subscriptions.push(
