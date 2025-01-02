@@ -13,7 +13,6 @@ suite('ServerManager Tests', () => {
     let mockOutputChannel: vscode.OutputChannel;
     let mockProcessManager: ProcessManager;
     let sandbox: sinon.SinonSandbox;
-    let configChangeCallback: () => void;
     let mockWorkspace: {
         getConfiguration: () => vscode.WorkspaceConfiguration;
         onDidChangeConfiguration: () => { dispose: () => void };
@@ -103,9 +102,7 @@ suite('ServerManager Tests', () => {
                 has: () => true,
                 inspect: () => undefined
             }),
-            onDidChangeConfiguration: () => {
-                return { dispose: () => {} };
-            }
+            onDidChangeConfiguration: () => ({ dispose: () => {} })
         };
 
         // Create instance with mocked dependencies using proxyquire
@@ -127,7 +124,12 @@ suite('ServerManager Tests', () => {
                 commands: {
                     executeCommand: () => Promise.resolve()
                 },
-                workspace: mockWorkspace,
+                workspace: {
+                    ...mockWorkspace,
+                    createConfigurationChangeEvent: () => ({
+                        affectsConfiguration: () => true
+                    })
+                },
                 '@noCallThru': true
             }
         }).ServerManager;
@@ -262,10 +264,52 @@ suite('ServerManager Tests', () => {
         // Reset checkForUpdates stub since it's called in constructor
         (mockProcessManager.checkForUpdates as sinon.SinonStub).resetHistory();
 
-        // Trigger configuration change
-        await configChangeCallback();
+        // Mock workspace configuration
+        const mockConfig = {
+            get: (key: string) => key === 'autoUpdate' ? true : undefined,
+            has: () => true,
+            inspect: () => undefined,
+            update: () => Promise.resolve()
+        } as vscode.WorkspaceConfiguration;
+        sandbox.stub(mockWorkspace, 'getConfiguration').returns(mockConfig);
+
+        // Create new instance to trigger configuration setup
+        const ServerManagerProxy = proxyquire.noCallThru().load('../../../extension/managers/serverManager', {
+            'fs': {
+                existsSync: () => true
+            },
+            './processManager': {
+                ProcessManager: function() {
+                    return mockProcessManager;
+                }
+            },
+            'vscode': {
+                window: {
+                    createOutputChannel: () => mockOutputChannel,
+                    showErrorMessage: () => Promise.resolve(),
+                    showInformationMessage: () => Promise.resolve()
+                },
+                commands: {
+                    executeCommand: () => Promise.resolve()
+                },
+                workspace: {
+                    ...mockWorkspace,
+                    // eslint-disable-next-line no-unused-vars
+                    onDidChangeConfiguration: (cb: (e: vscode.ConfigurationChangeEvent) => Promise<void> | void) => {
+                        // Immediately trigger the callback with mocked event
+                        cb({
+                            affectsConfiguration: (_section: string) => _section === 'thymelab.processor.autoUpdate'
+                        } as vscode.ConfigurationChangeEvent);
+                        return { dispose: () => {} };
+                    }
+                },
+                '@noCallThru': true
+            }
+        }).ServerManager;
+
+        serverManager = new ServerManagerProxy(mockContext);
         
-        sinon.assert.calledOnce(mockProcessManager.checkForUpdates as sinon.SinonStub);
+        sinon.assert.calledTwice(mockProcessManager.checkForUpdates as sinon.SinonStub);
     });
 
     // Test JAR download

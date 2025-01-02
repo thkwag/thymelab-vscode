@@ -4,10 +4,10 @@ import { downloadAndUnzipVSCode, resolveCliArgsFromVSCodeExecutablePath, runTest
 async function main() {
     try {
         const vscodeExecutablePath = await downloadAndUnzipVSCode();
-        const [cliPath, ...args] = resolveCliArgsFromVSCodeExecutablePath(vscodeExecutablePath);
+        const [, ...args] = resolveCliArgsFromVSCodeExecutablePath(vscodeExecutablePath);
 
         const extensionDevelopmentPath = path.resolve(__dirname, '../../');
-        const extensionTestsPath = path.resolve(__dirname, './suite/index');
+        const extensionTestsPath = path.resolve(__dirname, '../../dist/test/suite/index');
 
         await runTests({
             vscodeExecutablePath,

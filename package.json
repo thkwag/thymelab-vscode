@@ -376,8 +376,9 @@
     "watch": "tsc -watch -p ./",
     "lint": "eslint src --ext ts",
     "package": "node scripts/build-vsix.js",
-    "test": "ELECTRON_DISABLE_GPU=1 ELECTRON_NO_ATTACH_CONSOLE=1 ELECTRON_ENABLE_LOGGING=0 node ./out/test/runTest.js 2>/dev/null",
-    "pretest": "npm run compile-tests",
+    "clean": "rimraf dist",
+    "test": "cross-env ELECTRON_DISABLE_GPU=1 ELECTRON_NO_ATTACH_CONSOLE=1 ELECTRON_ENABLE_LOGGING=0 NODE_NO_WARNINGS=1 VSCODE_SKIP_BUILTIN_EXTENSION_LOAD=1 VSCODE_BROWSER_CODE_LOADING=none node --no-deprecation ./dist/test/runTest.js",
+    "pretest": "npm run clean && npm run compile && npm run compile-tests",
     "compile-tests": "tsc -p ./",
     "watch-tests": "tsc -watch -p ./"
   },
