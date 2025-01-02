@@ -8,9 +8,9 @@ export class ServerManager {
     private outputChannel: vscode.OutputChannel;
     private currentState: ServerState = ServerState.Stopped;
 
-    constructor(context: vscode.ExtensionContext) {
+    constructor(context: vscode.ExtensionContext, isTest: boolean = false) {
         this.outputChannel = vscode.window.createOutputChannel('ThymeLab Processor');
-        this.processManager = new ProcessManager(this.outputChannel, context);
+        this.processManager = new ProcessManager(this.outputChannel, context, undefined, isTest);
 
         // Add configuration change listener for auto update
         context.subscriptions.push(
@@ -22,7 +22,9 @@ export class ServerManager {
         );
 
         // Initial update check
-        this.checkForUpdates();
+        if (!isTest) {
+            this.checkForUpdates();
+        }
     }
 
     private async checkForUpdates(): Promise<void> {

@@ -33,6 +33,16 @@
                 "panel": "new"
             },
             "group": "build"
+        },
+        {
+            "label": "npm: compile-tests",
+            "type": "shell",
+            "command": "npm run compile-tests",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "group": "test"
         }
     ]
 } 

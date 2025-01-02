@@ -24,7 +24,7 @@
             "outFiles": [
                 "${workspaceFolder}/dist/**/*.js"
             ],
-            "preLaunchTask": "vscode:watch"
+            "preLaunchTask": "npm: compile-tests"
         },
         {
             "name": "Debug ThymeLab Processor",
