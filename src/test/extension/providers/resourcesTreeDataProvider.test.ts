@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable no-unused-vars */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { ResourcesTreeDataProvider, ResourceTreeItem } from '../../../extension/providers/resourcesTreeDataProvider';

@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import * as vscode from 'vscode';
 import { spawn, ChildProcess } from 'child_process';
 import axios, { AxiosError } from 'axios';
@@ -8,6 +9,16 @@ interface GitHubRelease {
     name: string;
 }
 
+interface FileSystem {
+    writeFile(path: string, data: Buffer): Promise<void>;
+}
+
+class VSCodeFileSystem implements FileSystem {
+    async writeFile(path: string, data: Buffer): Promise<void> {
+        await vscode.workspace.fs.writeFile(vscode.Uri.file(path), data);
+    }
+}
+
 export class ProcessManager {
     private process: ChildProcess | null = null;
     private healthCheckInterval: NodeJS.Timeout | null = null;
@@ -15,17 +26,27 @@ export class ProcessManager {
     private outputChannel: vscode.OutputChannel;
     private context: vscode.ExtensionContext;
     private statusBarItem: vscode.StatusBarItem;
+    private fileSystem: FileSystem;
 
-    constructor(outputChannel: vscode.OutputChannel, context: vscode.ExtensionContext) {
+    constructor(
+        outputChannel: vscode.OutputChannel, 
+        context: vscode.ExtensionContext, 
+        fileSystem?: FileSystem,
+        skipInitialChecks: boolean = false
+    ) {
         this.outputChannel = outputChannel;
         this.context = context;
         this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right);
-        this.checkForUpdates();  // Check once at startup
+        this.fileSystem = fileSystem || new VSCodeFileSystem();
+        
+        if (!skipInitialChecks) {
+            this.checkForUpdates();  // Check once at startup
 
-        // Check if JAR file exists
-        const jarPath = this.getConfig<string>('jarPath');
-        if (!jarPath || !existsSync(jarPath)) {
-            this.downloadJar();
+            // Check if JAR file exists
+            const jarPath = this.getConfig<string>('jarPath');
+            if (!jarPath || !existsSync(jarPath)) {
+                this.downloadJar();
+            }
         }
     }
 
@@ -224,8 +245,6 @@ export class ProcessManager {
             const downloadUrl = `https://github.com/thkwag/thymelab/releases/download/v${version}/thymelab-processor-${version}.jar`;
             const globalStoragePath = vscode.Uri.joinPath(this.context.globalStorageUri, `thymelab-processor-${version}.jar`).fsPath;
 
-            // this.outputChannel.appendLine(`Downloading JAR file from ${downloadUrl}`);
-
             // Show progress
             await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
@@ -243,23 +262,56 @@ export class ProcessManager {
                     }
                 });
 
-                await vscode.workspace.fs.writeFile(
-                    vscode.Uri.file(globalStoragePath),
-                    Buffer.from(response.data)
-                );
+                if (!response.data) {
+                    throw new Error('Failed to download JAR file: No data received');
+                }
 
-                // Save path to settings
-                await vscode.workspace.getConfiguration('thymelab.processor').update('jarPath', globalStoragePath, true);
+                await this.fileSystem.writeFile(globalStoragePath, Buffer.from(response.data));
             });
 
             return globalStoragePath;
         } catch (error) {
-            throw new Error(`Failed to download JAR file: ${error}`);
+            this.handleError(error, 'download JAR file');
         }
     }
 
-    private colorizeLog(text: string): string {
-        return text;
+    async checkForUpdates(): Promise<void> {
+        if (!this.getConfig<boolean>('autoUpdate', true)) {
+            this.statusBarItem.hide();
+            return;
+        }
+
+        try {
+            const response = await axios.get<GitHubRelease[]>('https://api.github.com/repos/thkwag/thymelab/releases');
+            if (!response?.data?.length) {
+                return;
+            }
+
+            const latestVersion = response.data[0].tag_name.replace(/^v/, '');
+            const jarPath = this.getConfig<string>('jarPath');
+            if (!jarPath) {
+                return;
+            }
+
+            const currentVersion = jarPath.match(/thymelab-processor-(.+)\.jar/)?.[1];
+            if (!currentVersion || currentVersion !== latestVersion) {
+                await this.showUpdateNotification(latestVersion);
+            }
+        } catch (error) {
+            this.handleError(error, 'check for updates', false);
+        }
+    }
+
+    private async showUpdateNotification(version: string): Promise<void> {
+        const selection = await vscode.window.showInformationMessage(
+            `New version of ThymeLab Processor is available: ${version}`,
+            'Update',
+            'Later'
+        );
+
+        if (selection === 'Update') {
+            await this.downloadJar(true);
+        }
     }
 
     async startServer(): Promise<void> {
@@ -267,9 +319,6 @@ export class ProcessManager {
             if (this.process) {
                 throw new Error('Server is already running');
             }
-
-            // Check for updates before starting server
-            await this.checkForUpdates();
 
             const jarPath = await this.downloadJar();
             const args = [
@@ -295,8 +344,8 @@ export class ProcessManager {
                 cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
             });
 
-            this.process.stdout?.on('data', (data) => this.outputChannel.append(this.colorizeLog(data.toString())));
-            this.process.stderr?.on('data', (data) => this.outputChannel.append(this.colorizeLog(data.toString())));
+            this.process.stdout?.on('data', (data) => this.outputChannel.append(data.toString()));
+            this.process.stderr?.on('data', (data) => this.outputChannel.append(data.toString()));
             this.process.on('close', () => this.cleanup());
 
             await new Promise<void>((resolve) => {
@@ -345,68 +394,6 @@ export class ProcessManager {
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             this.outputChannel.appendLine(`Failed to change log level: ${message}`);
-        }
-    }
-
-    private async showUpdateNotification(version: string): Promise<void> {
-        // Don't show update notification if server is running
-        if (this.process) {
-            return;
-        }
-
-        const selection = await vscode.window.showInformationMessage(
-            `ThymeLab Processor update available: ${version}`,
-            'Update',
-            'Later'
-        );
-        if (selection === 'Update') {
-            await this.downloadJar(true);
-            this.statusBarItem.hide();
-        } else if (selection === 'Later') {
-            this.statusBarItem.show(); // Keep the status bar item visible for later
-        }
-    }
-
-    async checkForUpdates(): Promise<void> {
-        // Don't check for updates if server is running
-        if (this.process) {
-            return;
-        }
-
-        try {
-            const jarPath = this.getConfig<string>('jarPath');
-            if (!jarPath) return;
-
-            // Check if auto update is enabled
-            const autoUpdate = this.getConfig<boolean>('autoUpdate', true);
-            if (!autoUpdate) {
-                this.statusBarItem.hide(); // Hide update notification if auto update is disabled
-                return;
-            }
-
-            const currentVersion = jarPath.match(/thymelab-processor-([\d.]+)\.jar$/)?.[1];
-            if (!currentVersion) return;
-
-            const response = await axios.get<GitHubRelease[]>('https://api.github.com/repos/thkwag/thymelab/releases');
-            const latestRelease = response.data[0];
-            const latestVersion = latestRelease.tag_name.replace(/^v/, '');
-
-            if (latestVersion > currentVersion) {
-                this.statusBarItem.text = `$(cloud-download) ThymeLab Processor Update`;
-                this.statusBarItem.tooltip = `New version available: ${latestVersion}`;
-                this.statusBarItem.command = {
-                    command: 'thymelab.updateProcessor',
-                    title: 'Show Update Notification',
-                    arguments: [() => this.showUpdateNotification(latestVersion)]
-                };
-                this.statusBarItem.show();
-
-                this.showUpdateNotification(latestVersion);
-            } else {
-                this.statusBarItem.hide(); // Hide if no updates available
-            }
-        } catch (error) {
-            console.error('Failed to check for updates:', error);
         }
     }
 } 

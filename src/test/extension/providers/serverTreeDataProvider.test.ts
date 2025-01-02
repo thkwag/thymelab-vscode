@@ -1,8 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { ServerTreeDataProvider, ServerTreeItem } from '../../../extension/providers/serverTreeDataProvider';
 import { ServerManager } from '../../../extension/managers/serverManager';
 import { ServerState } from '../../../extension/types/serverState';
+import { createMockExtensionContext } from '../../testUtils/mockVscode';
 
 suite('ServerTreeDataProvider Tests', () => {
     let provider: ServerTreeDataProvider;
@@ -11,49 +13,8 @@ suite('ServerTreeDataProvider Tests', () => {
 
     setup(() => {
         disposables = [];
-        const mockContext = {
-            subscriptions: [],
-            globalStorageUri: vscode.Uri.file('/mock/storage'),
-            workspaceState: {
-                get: () => {},
-                update: () => Promise.resolve(),
-                keys: () => []
-            } as vscode.Memento,
-            globalState: {
-                setKeysForSync: () => {},
-                get: () => {},
-                update: () => Promise.resolve(),
-                keys: () => []
-            } as vscode.Memento & { setKeysForSync(keys: readonly string[]): void },
-            secrets: {} as vscode.SecretStorage,
-            extensionUri: vscode.Uri.file('/mock/extension'),
-            extensionPath: '/mock/extension',
-            storageUri: vscode.Uri.file('/mock/storage'),
-            logUri: vscode.Uri.file('/mock/log'),
-            extensionMode: vscode.ExtensionMode.Test,
-            environmentVariableCollection: {
-                persistent: true,
-                description: 'Mock environment variables',
-                replace: () => {},
-                append: () => {},
-                prepend: () => {},
-                get: () => undefined,
-                forEach: () => {},
-                delete: () => {},
-                clear: () => {},
-                getScoped: () => ({} as vscode.EnvironmentVariableCollection),
-                [Symbol.iterator]: function* () {
-                    yield ['key', { value: 'value', type: 'replace' }];
-                }
-            } as vscode.GlobalEnvironmentVariableCollection,
-            asAbsolutePath: (relativePath: string) => relativePath,
-            storagePath: '/mock/storage',
-            logPath: '/mock/log',
-            globalStoragePath: '/mock/global-storage',
-            extension: {} as vscode.Extension<any>,
-            languageModelAccessInformation: {} as vscode.LanguageModelAccessInformation
-        } as unknown as vscode.ExtensionContext;
-        serverManager = new ServerManager(mockContext);
+        const mockContext = createMockExtensionContext();
+        serverManager = new ServerManager(mockContext, true);
         provider = new ServerTreeDataProvider(serverManager);
     });
 
