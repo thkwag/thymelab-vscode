@@ -9,12 +9,15 @@ export interface TextPosition {
 }
 
 export class ThymeleafDefinitionParser {
-    private readonly TEMPLATE_REFERENCE_PATTERN = /th:(?:replace|insert|include|substituteby)="([^"]+)"|@{([^}]+)}/g;
+    private readonly TEMPLATE_REFERENCE_PATTERN = /th:(?:replace|insert|include|substituteby)="([^"]+)"|@{([^}]+)}|layout:(?:decorate|fragment)="([^"]+)"/g;
     private readonly FRAGMENT_PATTERN = /~\{([^}]+)\}/g;
-    private readonly CONDITIONAL_PATTERN = /\$\{([^}]+)\}\s*\?\s*'([^']+)'\s*:\s*'([^']+)'/g;
-    private readonly INVALID_PATH_CHARS = /[<>:"|?*]/;
-    private readonly FRAGMENT_DEFINITION_PATTERN = /th:fragment\s*=\s*["']([^"']+)["']/;
+    private readonly CONDITIONAL_PATTERN = /\$\{[^}]+\}\s*\?\s*'([^']+)'\s*:\s*(?:'([^']+)'|_)/g;
+    private readonly ELVIS_PATTERN = /\$\{[^}]+\}\s*\?:\s*'([^']+)'/g;
+    private readonly INVALID_PATH_CHARS = /[<>"|?*]/;
+    private readonly FRAGMENT_DEFINITION_PATTERN = /(?:th|layout):fragment\s*=\s*["']([^"']+)["']/;
     private readonly DYNAMIC_LINK_PATTERN = /@{\${/;
+    private readonly SELECTION_PATTERN = /\*{([^}]+)}/g;
+    private readonly LITERAL_SUBSTITUTION_PATTERN = /\|([^|]+)\|/g;
 
     public isFragmentDefinition(line: string): boolean {
         return this.FRAGMENT_DEFINITION_PATTERN.test(line);
@@ -54,48 +57,81 @@ export class ThymeleafDefinitionParser {
         // Handle standard template references and static resources
         const matches = Array.from(line.matchAll(this.TEMPLATE_REFERENCE_PATTERN));
         for (const match of matches) {
-            const [fullMatch, thContent, staticContent] = match;
-            const content = thContent || staticContent;
+            const [fullMatch, thContent, staticContent, layoutContent] = match;
+            const content = thContent || staticContent || layoutContent;
             if (!content) continue;
 
-            const startIndex = line.indexOf(fullMatch) + (thContent ? fullMatch.indexOf(thContent) : fullMatch.indexOf(staticContent));
-            this.extractTemplateReferences(content, startIndex, references, seen);
-        }
-
-        // Handle conditional references
-        const conditionalMatches = Array.from(line.matchAll(/th:(?:replace|insert|include|substituteby)="([^"]+)"/g));
-        for (const match of conditionalMatches) {
-            const [fullMatch, content] = match;
-            if (!content) continue;
-
-            const startIndex = line.indexOf(fullMatch);
-            if (content.includes('?')) {
-                const conditionalMatch = content.match(/\$\{[^}]+\}\s*\?\s*'([^']+)'\s*:\s*'([^']+)'/);
-                if (conditionalMatch) {
-                    const [, truePath, falsePath] = conditionalMatch;
-                    const paths = [truePath, falsePath].filter(Boolean);
-                    for (const path of paths) {
-                        const cleanPath = path.split('::')[0].trim();
-                        if (!seen.has(cleanPath)) {
-                            const actualStartIndex = line.indexOf(cleanPath);
+            const startIndex = line.indexOf(fullMatch) + (thContent ? fullMatch.indexOf(thContent) : 
+                layoutContent ? fullMatch.indexOf(layoutContent) : fullMatch.indexOf(staticContent));
+            
+            // Handle conditional expressions within template references
+            if (content.includes('?') && !content.includes('?:')) {
+                const conditionalMatches = Array.from(content.matchAll(this.CONDITIONAL_PATTERN));
+                for (const condMatch of conditionalMatches) {
+                    const [, truePath, falsePath] = condMatch;
+                    if (truePath) {
+                        const cleanPath = this.extractPathFromReference(truePath);
+                        if (cleanPath && !seen.has(cleanPath)) {
                             references.push({
                                 path: cleanPath,
-                                startIndex: actualStartIndex >= 0 ? actualStartIndex : startIndex
+                                startIndex: line.indexOf(truePath)
+                            });
+                            seen.add(cleanPath);
+                        }
+                    }
+                    if (falsePath && falsePath !== '_') {
+                        const cleanPath = this.extractPathFromReference(falsePath);
+                        if (cleanPath && !seen.has(cleanPath)) {
+                            references.push({
+                                path: cleanPath,
+                                startIndex: line.indexOf(falsePath)
+                            });
+                            seen.add(cleanPath);
+                        }
+                    }
+                }
+            } else if (content.includes('?:')) {
+                const elvisMatches = Array.from(content.matchAll(this.ELVIS_PATTERN));
+                for (const elvisMatch of elvisMatches) {
+                    const [, defaultPath] = elvisMatch;
+                    if (defaultPath) {
+                        const cleanPath = this.extractPathFromReference(defaultPath);
+                        if (cleanPath && !seen.has(cleanPath)) {
+                            references.push({
+                                path: cleanPath,
+                                startIndex: line.indexOf(defaultPath)
                             });
                             seen.add(cleanPath);
                         }
                     }
                 }
             } else {
+                // Extract path before any parameters or expressions
                 const path = this.extractPathFromReference(content);
                 if (path && !seen.has(path)) {
-                    const actualStartIndex = line.indexOf(path);
                     references.push({
                         path,
-                        startIndex: actualStartIndex >= 0 ? actualStartIndex : startIndex
+                        startIndex: content.indexOf(path) >= 0 ? startIndex + content.indexOf(path) : startIndex
                     });
                     seen.add(path);
                 }
+            }
+        }
+
+        // Handle literal substitutions
+        const literalMatches = Array.from(line.matchAll(this.LITERAL_SUBSTITUTION_PATTERN));
+        for (const match of literalMatches) {
+            const [fullMatch, content] = match;
+            if (!content) continue;
+
+            const startIndex = line.indexOf(fullMatch);
+            const path = this.extractPathFromReference(content);
+            if (path && !seen.has(path)) {
+                references.push({
+                    path,
+                    startIndex
+                });
+                seen.add(path);
             }
         }
 
@@ -109,40 +145,76 @@ export class ThymeleafDefinitionParser {
             const parts = content.split('::');
             const path = this.extractPathFromReference(parts[0]);
             if (path && !seen.has(path)) {
-                const actualStartIndex = line.indexOf(path);
                 references.push({ 
                     path, 
-                    startIndex: actualStartIndex >= 0 ? actualStartIndex : startIndex 
+                    startIndex: line.indexOf(path) >= 0 ? line.indexOf(path) : startIndex 
                 });
                 seen.add(path);
             }
         }
 
-        return references.filter(ref => {
+        // Handle complex fragment expressions with parameters
+        const complexFragmentPattern = /(?:th:(?:replace|insert|include))\s*=\s*["']([^"']+)\s*::\s*[^"']+\([^)]+\)["']/g;
+        const complexMatches = Array.from(line.matchAll(complexFragmentPattern));
+        for (const match of complexMatches) {
+            const [fullMatch, content] = match;
+            if (!content) continue;
+
+            const startIndex = line.indexOf(fullMatch);
+            const path = this.extractPathFromReference(content);
+            if (path && !seen.has(path)) {
+                references.push({
+                    path,
+                    startIndex
+                });
+                seen.add(path);
+            }
+        }
+
+        // Filter and normalize references
+        const filteredRefs = references.filter(ref => {
             if (!ref.path) return false;
             if (ref.path === '::' || ref.path === '') return false;
             
             // Allow paths with expressions
-            if (ref.path.includes('${')) {
-                const parts = ref.path.split(/\$\{[^}]+\}/);
-                return parts.every(part => !this.INVALID_PATH_CHARS.test(part)) && !ref.path.includes('?') && !ref.path.includes(':');
+            if (ref.path.includes('${') || ref.path.includes('*{') || ref.path.includes('#{')) {
+                const parts = ref.path.split(/\$\{[^}]+\}|\*\{[^}]+\}|#\{[^}]+\}/);
+                return parts.every(part => !this.INVALID_PATH_CHARS.test(part));
+            }
+
+            // Handle template resolver prefixes
+            if (ref.path.startsWith('classpath:') || ref.path.startsWith('file:')) {
+                return !this.INVALID_PATH_CHARS.test(ref.path.substring(ref.path.indexOf(':') + 1));
             }
 
             return !this.INVALID_PATH_CHARS.test(ref.path);
         });
+
+        // Remove duplicates while preserving order
+        const uniqueRefs: Array<{path: string, startIndex: number}> = [];
+        const seenPaths = new Set<string>();
+        for (const ref of filteredRefs) {
+            const normalizedPath = this.normalizePath(ref.path);
+            if (!seenPaths.has(normalizedPath)) {
+                uniqueRefs.push(ref);
+                seenPaths.add(normalizedPath);
+            }
+        }
+
+        return uniqueRefs;
     }
 
     private extractTemplateReferences(content: string, startIndex: number, references: Array<{path: string, startIndex: number}>, seen: Set<string>): void {
         if (!content || content === '::') return;
 
         // Handle fragment notation (path :: fragment)
-        const parts = content.split('::');
+        const parts = content.split('::').map(p => p.trim());
         const path = this.extractPathFromReference(parts[0]);
+        
         if (path && !seen.has(path)) {
-            const actualStartIndex = content.indexOf(path);
             references.push({ 
                 path, 
-                startIndex: actualStartIndex >= 0 ? startIndex + actualStartIndex : startIndex 
+                startIndex: content.indexOf(path) >= 0 ? startIndex + content.indexOf(path) : startIndex 
             });
             seen.add(path);
         }
@@ -151,7 +223,7 @@ export class ThymeleafDefinitionParser {
     private extractPathFromReference(reference: string): string | null {
         if (!reference) return null;
 
-        // Remove quotes, trim, and remove leading @{ or ~{
+        // Remove quotes and trim
         let path = reference.trim()
             .replace(/^['"]|['"]$/g, '')
             .replace(/^@{/, '')
@@ -159,12 +231,53 @@ export class ThymeleafDefinitionParser {
             .replace(/}$/, '')
             .trim();
         
+        // Handle template resolver prefixes
+        if (path.startsWith('classpath:') || path.startsWith('file:')) {
+            path = path.substring(path.indexOf(':') + 1);
+        }
+
+        // Handle context-relative URLs
+        if (path.startsWith('~/')) {
+            path = path.substring(2);
+        }
+
         // Remove leading slash
         path = path.replace(/^\//, '');
 
-        // Extract path before any parameters or selectors
-        const parts = path.split(/[\s(]/);
-        return parts[0].trim();
+        // Handle preprocessed expressions
+        if (path.startsWith('__') && path.endsWith('__')) {
+            return path;
+        }
+
+        // Handle URL parameters
+        const urlParamIndex = path.indexOf('(');
+        if (urlParamIndex > -1) {
+            path = path.substring(0, urlParamIndex);
+        }
+
+        // Handle fragment notation with parameters
+        const fragmentParts = path.split('::').map(p => p.trim());
+        const pathWithoutFragment = fragmentParts[0].trim();
+
+        // If there's a fragment part with parameters, extract just the fragment name
+        if (fragmentParts.length > 1) {
+            const fragmentPart = fragmentParts[1];
+            const paramIndex = fragmentPart.indexOf('(');
+            if (paramIndex > -1) {
+                // Return the template path part
+                return pathWithoutFragment;
+            }
+        }
+
+        // Handle expressions in path
+        if (pathWithoutFragment.includes('${') || 
+            pathWithoutFragment.includes('*{') || 
+            pathWithoutFragment.includes('#{') ||
+            pathWithoutFragment.includes('|')) {
+            return pathWithoutFragment;
+        }
+
+        return pathWithoutFragment || null;
     }
 
     private isValidPath(path: string): boolean {
