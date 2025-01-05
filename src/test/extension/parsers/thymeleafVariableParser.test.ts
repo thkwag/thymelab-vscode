@@ -357,4 +357,499 @@ suite('ThymeleafVariableParser - Variable Detection', () => {
             });
         });
     });
+
+    suite('Fragment Parameters', () => {
+        test('should handle fragment parameters', () => {
+            const line = '<div th:replace="~{::frag (onevar=${value1},twovar=${value2})}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${value1}' && v[1] === 'value1'));
+            assert.ok(matches.some(v => v[0] === '${value2}' && v[1] === 'value2'));
+        });
+
+        test('should handle fragment parameters with different order', () => {
+            const line = '<div th:replace="~{::frag (twovar=${value2},onevar=${value1})}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${value1}' && v[1] === 'value1'));
+            assert.ok(matches.some(v => v[0] === '${value2}' && v[1] === 'value2'));
+        });
+
+        test('should handle fragment local variables without arguments', () => {
+            const line = '<div th:replace="~{::frag}" th:with="onevar=${value1},twovar=${value2}">';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${value1}' && v[1] === 'value1'));
+            assert.ok(matches.some(v => v[0] === '${value2}' && v[1] === 'value2'));
+        });
+
+        test('should handle fragment assertions', () => {
+            const line = '<div th:assert="${onevar},(${twovar} != 43)">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${onevar}' && v[1] === 'onevar'));
+            assert.ok(matches.some(v => v[0] === '${twovar} != 43' && v[1] === 'twovar'));
+        });
+
+        test('should handle fragment assertions with string validation', () => {
+            const line = '<header th:fragment="contentheader(title)" th:assert="${!#strings.isEmpty(title)}">...</header>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${!#strings.isEmpty(title)}' && v[1] === 'title'));
+        });
+    });
+
+    suite('Template Removal', () => {
+        test('should handle th:remove attribute', () => {
+            const line = '<tr th:remove="all-but-first" th:each="prod : ${prods}">';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${prods}' && v[1] === 'prods'));
+        });
+
+        test('should handle th:remove with complex expressions', () => {
+            const line = '<tr th:remove="${condition} ? \'all\' : \'none\'">';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${condition}' && v[1] === 'condition'));
+        });
+    });
+
+    suite('Markup Selector Syntax', () => {
+        test('should handle direct children selector', () => {
+            const line = '<div th:replace="~{mytemplate :: /div[@class=\'content\']}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.strictEqual(matches.length, 0);
+        });
+
+        test('should handle children at any depth selector', () => {
+            const line = '<div th:replace="~{mytemplate :: //div[@class=\'content\']}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.strictEqual(matches.length, 0);
+        });
+
+        test('should handle multiple attribute selectors', () => {
+            const line = '<div th:replace="~{mytemplate :: div[@z1=\'v1\' and @z2=\'v2\']}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.strictEqual(matches.length, 0);
+        });
+
+        test('should handle position selector', () => {
+            const line = '<div th:replace="~{mytemplate :: div[2]}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.strictEqual(matches.length, 0);
+        });
+
+        test('should handle attribute comparison operators', () => {
+            const line = '<div th:replace="~{mytemplate :: div[@class^=\'section\']}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.strictEqual(matches.length, 0);
+        });
+
+        test('should handle jQuery-like selectors', () => {
+            const line = '<div th:replace="~{mytemplate :: div.content#main}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.strictEqual(matches.length, 0);
+        });
+
+        test('should handle reference selectors', () => {
+            const line = '<div th:replace="~{mytemplate :: div%oneref}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.strictEqual(matches.length, 0);
+        });
+    });
+
+    suite('Comments and Blocks', () => {
+        test('should handle standard HTML comments', () => {
+            const line = '<!-- User info follows --><div th:text="${user.name}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${user.name}' && v[1] === 'user.name'));
+            assert.ok(matches.some(v => v[0] === '${user.name}' && v[1] === 'user'));
+        });
+
+        test('should handle Thymeleaf parser-level comment blocks', () => {
+            const line = '<!--/* This code will be removed at Thymeleaf parsing time! */--><div th:text="${user.name}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${user.name}' && v[1] === 'user.name'));
+            assert.ok(matches.some(v => v[0] === '${user.name}' && v[1] === 'user'));
+        });
+
+        test('should handle Thymeleaf prototype-only comment blocks', () => {
+            const line = '<!--/*--> <div th:text="${user.name}">...</div> <!--*/-->';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${user.name}' && v[1] === 'user.name'));
+            assert.ok(matches.some(v => v[0] === '${user.name}' && v[1] === 'user'));
+        });
+    });
+
+    suite('Attribute Precedence', () => {
+        test('should handle multiple attributes with precedence', () => {
+            const line = '<div th:object="${user}" th:with="name=${user.name}" th:text="${name}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${user}' && v[1] === 'user'));
+            assert.ok(matches.some(v => v[0] === '${user.name}' && v[1] === 'user.name'));
+            assert.ok(matches.some(v => v[0] === '${name}' && v[1] === 'name'));
+        });
+
+        test('should handle fragment inclusion with precedence', () => {
+            const line = '<div th:insert="~{common :: header}" th:with="title=${page.title}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${page.title}' && v[1] === 'page.title'));
+        });
+
+        test('should handle fragment iteration with precedence', () => {
+            const line = '<div th:each="item : ${items}" th:text="${item.name}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${items}' && v[1] === 'items'));
+            assert.ok(matches.some(v => v[0] === '${item.name}' && v[1] === 'item.name'));
+        });
+    });
+
+    suite('Inlining', () => {
+        test('should handle text inlining', () => {
+            const line = '<script th:inline="text">A dynamic value: [[${user.name}]]</script>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${user.name}' && v[1] === 'user.name'));
+            assert.ok(matches.some(v => v[0] === '${user.name}' && v[1] === 'user'));
+        });
+
+        test('should handle javascript inlining', () => {
+            const line = '<script th:inline="javascript">var user = [[${user.name}]];</script>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${user.name}' && v[1] === 'user.name'));
+            assert.ok(matches.some(v => v[0] === '${user.name}' && v[1] === 'user'));
+        });
+
+        test('should handle css inlining', () => {
+            const line = '<style th:inline="css">.main { background: url([[${backgroundImage}]]); }</style>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${backgroundImage}' && v[1] === 'backgroundImage'));
+        });
+
+        test('should handle javascript natural templating', () => {
+            const line = '<script th:inline="javascript">var user = /*[[${user.name}]]*/ "John Doe";</script>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${user.name}' && v[1] === 'user.name'));
+            assert.ok(matches.some(v => v[0] === '${user.name}' && v[1] === 'user'));
+        });
+    });
+
+    suite('Text Templates', () => {
+        test('should handle text template mode', () => {
+            const line = '[# th:text="${user.name}"]';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${user.name}' && v[1] === 'user.name'));
+            assert.ok(matches.some(v => v[0] === '${user.name}' && v[1] === 'user'));
+        });
+
+        test('should handle text template with inlining', () => {
+            const line = '[# th:inline="text"]Welcome [[${user.name}]]![/]';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${user.name}' && v[1] === 'user.name'));
+            assert.ok(matches.some(v => v[0] === '${user.name}' && v[1] === 'user'));
+        });
+
+        test('should handle text template with iteration', () => {
+            const line = '[# th:each="item : ${items}"]- [[${item.name}]][/]';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${items}' && v[1] === 'items'));
+            assert.ok(matches.some(v => v[0] === '${item.name}' && v[1] === 'item.name'));
+        });
+    });
+
+    suite('Decoupled Template Logic', () => {
+        test('should handle decoupled logic expressions', () => {
+            const line = '<!-- /*/th:text="${user.name}"/*/-->';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${user.name}' && v[1] === 'user.name'));
+            assert.ok(matches.some(v => v[0] === '${user.name}' && v[1] === 'user'));
+        });
+
+        test('should handle decoupled logic with iteration', () => {
+            const line = '<!-- /*/th:each="item : ${items}"/*/-->';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${items}' && v[1] === 'items'));
+        });
+
+        test('should handle decoupled logic with complex expressions', () => {
+            const line = '<!-- /*/th:if="${user.age >= 18 and user.hasRole(\'ADULT\')}"/*/-->';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${user.age >= 18 and user.hasRole(\'ADULT\')}' && v[1] === 'user.age'));
+            assert.ok(matches.some(v => v[0] === '${user.age >= 18 and user.hasRole(\'ADULT\')}' && v[1] === 'user'));
+            assert.ok(matches.some(v => v[0] === '${user.age >= 18 and user.hasRole(\'ADULT\')}' && v[1] === 'user.hasRole'));
+        });
+    });
+
+    suite('Expression Basic Objects', () => {
+        test('should handle #ctx object', () => {
+            const line = '<div th:text="${#ctx.locale.country}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${#ctx.locale.country}' && v[1] === 'locale.country'));
+        });
+
+        test('should handle #vars object', () => {
+            const line = '<div th:text="${#vars.user.name}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${#vars.user.name}' && v[1] === 'user.name'));
+        });
+
+        test('should handle #locale object', () => {
+            const line = '<div th:text="${#locale}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${#locale}' && v[1] === 'locale'));
+        });
+
+        test('should handle #request object', () => {
+            const line = '<div th:text="${#request.contextPath}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${#request.contextPath}' && v[1] === 'contextPath'));
+        });
+    });
+
+    suite('Expression Utility Objects', () => {
+        test('should handle #messages utility', () => {
+            const line = '<div th:text="${#messages.msg(\'welcome\')}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${#messages.msg(\'welcome\')}' && v[1] === 'welcome'));
+        });
+
+        test('should handle #uris utility', () => {
+            const line = '<div th:text="${#uris.escapeQueryParam(param)}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${#uris.escapeQueryParam(param)}' && v[1] === 'param'));
+        });
+
+        test('should handle #conversions utility', () => {
+            const line = '<div th:text="${#conversions.convert(value, \'String\')}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${#conversions.convert(value, \'String\')}' && v[1] === 'value'));
+        });
+
+        test('should handle #dates utility', () => {
+            const line = '<div th:text="${#dates.format(date, \'dd-MM-yyyy\')}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${#dates.format(date, \'dd-MM-yyyy\')}' && v[1] === 'date'));
+        });
+
+        test('should handle #calendars utility', () => {
+            const line = '<div th:text="${#calendars.format(cal)}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${#calendars.format(cal)}' && v[1] === 'cal'));
+        });
+
+        test('should handle #numbers utility', () => {
+            const line = '<div th:text="${#numbers.formatDecimal(num, 1, 2)}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${#numbers.formatDecimal(num, 1, 2)}' && v[1] === 'num'));
+        });
+
+        test('should handle #strings utility', () => {
+            const line = '<div th:text="${#strings.toUpperCase(str)}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${#strings.toUpperCase(str)}' && v[1] === 'str'));
+        });
+
+        test('should handle #objects utility', () => {
+            const line = '<div th:text="${#objects.nullSafe(obj, \'default\')}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${#objects.nullSafe(obj, \'default\')}' && v[1] === 'obj'));
+        });
+
+        test('should handle #bools utility', () => {
+            const line = '<div th:text="${#bools.isTrue(flag)}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${#bools.isTrue(flag)}' && v[1] === 'flag'));
+        });
+
+        test('should handle #arrays utility', () => {
+            const line = '<div th:text="${#arrays.length(arr)}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${#arrays.length(arr)}' && v[1] === 'arr'));
+        });
+
+        test('should handle #lists utility', () => {
+            const line = '<div th:text="${#lists.size(list)}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${#lists.size(list)}' && v[1] === 'list'));
+        });
+
+        test('should handle #sets utility', () => {
+            const line = '<div th:text="${#sets.size(set)}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${#sets.size(set)}' && v[1] === 'set'));
+        });
+
+        test('should handle #maps utility', () => {
+            const line = '<div th:text="${#maps.size(map)}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${#maps.size(map)}' && v[1] === 'map'));
+        });
+
+        test('should handle #aggregates utility', () => {
+            const line = '<div th:text="${#aggregates.sum(numbers)}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${#aggregates.sum(numbers)}' && v[1] === 'numbers'));
+        });
+    });
+
+    suite('Expression Selection Variables', () => {
+        test('should handle selection variables in text', () => {
+            const line = '<div th:object="${user}" th:text="*{name}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${user}' && v[1] === 'user'));
+            assert.ok(matches.some(v => v[0] === '*{name}' && v[1] === 'name'));
+        });
+
+        test('should handle selection variables in attributes', () => {
+            const line = '<div th:object="${user}" th:value="*{age}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${user}' && v[1] === 'user'));
+            assert.ok(matches.some(v => v[0] === '*{age}' && v[1] === 'age'));
+        });
+
+        test('should handle nested selection variables', () => {
+            const line = '<div th:object="${user}" th:text="*{address.street}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${user}' && v[1] === 'user'));
+            assert.ok(matches.some(v => v[0] === '*{address.street}' && v[1] === 'address.street'));
+            assert.ok(matches.some(v => v[0] === '*{address.street}' && v[1] === 'address'));
+        });
+    });
+
+    suite('Message Expressions', () => {
+        test('should handle simple message expressions', () => {
+            const line = '<div th:text="#{welcome.message}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '#{welcome.message}' && v[1] === 'welcome.message'));
+        });
+
+        test('should handle message expressions with parameters', () => {
+            const line = '<div th:text="#{welcome(${user.name})}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '#{welcome(${user.name})}' && v[1] === 'welcome'));
+            assert.ok(matches.some(v => v[0] === '${user.name}' && v[1] === 'user.name'));
+            assert.ok(matches.some(v => v[0] === '${user.name}' && v[1] === 'user'));
+        });
+
+        test('should handle message expressions with multiple parameters', () => {
+            const line = '<div th:text="#{message(${param1},${param2})}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '#{message(${param1},${param2})}' && v[1] === 'message'));
+            assert.ok(matches.some(v => v[0] === '${param1}' && v[1] === 'param1'));
+            assert.ok(matches.some(v => v[0] === '${param2}' && v[1] === 'param2'));
+        });
+    });
+
+    suite('Link URL Expressions', () => {
+        test('should handle simple URL expressions', () => {
+            const line = '<a th:href="@{/order/list}">...</a>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.strictEqual(matches.length, 0);
+        });
+
+        test('should handle URL expressions with path variables', () => {
+            const line = '<a th:href="@{/order/{id}(id=${order.id})}">...</a>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${order.id}' && v[1] === 'order.id'));
+            assert.ok(matches.some(v => v[0] === '${order.id}' && v[1] === 'order'));
+        });
+
+        test('should handle URL expressions with query parameters', () => {
+            const line = '<a th:href="@{/order(id=${order.id},action=\'view\')}">...</a>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${order.id}' && v[1] === 'order.id'));
+            assert.ok(matches.some(v => v[0] === '${order.id}' && v[1] === 'order'));
+        });
+
+        test('should handle URL expressions with multiple parameters', () => {
+            const line = '<a th:href="@{/order/{id}/details(id=${order.id},type=${type})}">...</a>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${order.id}' && v[1] === 'order.id'));
+            assert.ok(matches.some(v => v[0] === '${order.id}' && v[1] === 'order'));
+            assert.ok(matches.some(v => v[0] === '${type}' && v[1] === 'type'));
+        });
+    });
+
+    suite('Fragment Expressions', () => {
+        test('should handle simple fragment expressions', () => {
+            const line = '<div th:insert="~{commons :: header}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.strictEqual(matches.length, 0);
+        });
+
+        test('should handle fragment expressions with parameters', () => {
+            const line = '<div th:insert="~{commons :: header(title=${title})}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${title}' && v[1] === 'title'));
+        });
+
+        test('should handle fragment expressions with multiple parameters', () => {
+            const line = '<div th:insert="~{commons :: header(title=${title},subtitle=${subtitle})}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${title}' && v[1] === 'title'));
+            assert.ok(matches.some(v => v[0] === '${subtitle}' && v[1] === 'subtitle'));
+        });
+
+        test('should handle fragment expressions with complex parameters', () => {
+            const line = '<div th:insert="~{commons :: header(title=${user.name + \' - \' + page.title})}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${user.name + \' - \' + page.title}' && v[1] === 'user.name'));
+            assert.ok(matches.some(v => v[0] === '${user.name + \' - \' + page.title}' && v[1] === 'page.title'));
+        });
+    });
+
+    suite('Literals and Operations', () => {
+        test('should handle string literals', () => {
+            const line = '<div th:text="${\'Hello \' + user.name}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${\'Hello \' + user.name}' && v[1] === 'user.name'));
+            assert.ok(matches.some(v => v[0] === '${\'Hello \' + user.name}' && v[1] === 'user'));
+        });
+
+        test('should handle numeric literals', () => {
+            const line = '<div th:if="${user.age > 18}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${user.age > 18}' && v[1] === 'user.age'));
+            assert.ok(matches.some(v => v[0] === '${user.age > 18}' && v[1] === 'user'));
+        });
+
+        test('should handle boolean literals', () => {
+            const line = '<div th:if="${true and user.active}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${true and user.active}' && v[1] === 'user.active'));
+            assert.ok(matches.some(v => v[0] === '${true and user.active}' && v[1] === 'user'));
+        });
+
+        test('should handle null literal', () => {
+            const line = '<div th:if="${user.name != null}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${user.name != null}' && v[1] === 'user.name'));
+            assert.ok(matches.some(v => v[0] === '${user.name != null}' && v[1] === 'user'));
+        });
+
+        test('should handle token literals', () => {
+            const line = '<div th:text="${user.gender.name()}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${user.gender.name()}' && v[1] === 'user.gender.name'));
+            assert.ok(matches.some(v => v[0] === '${user.gender.name()}' && v[1] === 'user.gender'));
+            assert.ok(matches.some(v => v[0] === '${user.gender.name()}' && v[1] === 'user'));
+        });
+    });
+
+    suite('Conditional Expressions', () => {
+        test('should handle if-then expressions', () => {
+            const line = '<div th:text="${user.gender == \'M\' ? \'Male\' : \'Female\'}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${user.gender == \'M\' ? \'Male\' : \'Female\'}' && v[1] === 'user.gender'));
+            assert.ok(matches.some(v => v[0] === '${user.gender == \'M\' ? \'Male\' : \'Female\'}' && v[1] === 'user'));
+        });
+
+        test('should handle elvis operator', () => {
+            const line = '<div th:text="${user.name ?: \'Anonymous\'}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${user.name ?: \'Anonymous\'}' && v[1] === 'user.name'));
+            assert.ok(matches.some(v => v[0] === '${user.name ?: \'Anonymous\'}' && v[1] === 'user'));
+        });
+
+        test('should handle if-then with multiple conditions', () => {
+            const line = '<div th:text="${user.age >= 18 ? (user.gender == \'M\' ? \'Mr.\' : \'Ms.\') : \'Young\'}">...</div>';
+            const matches = parser.findAllVariableMatches(line);
+            assert.ok(matches.some(v => v[0] === '${user.age >= 18 ? (user.gender == \'M\' ? \'Mr.\' : \'Ms.\') : \'Young\'}' && v[1] === 'user.age'));
+            assert.ok(matches.some(v => v[0] === '${user.age >= 18 ? (user.gender == \'M\' ? \'Mr.\' : \'Ms.\') : \'Young\'}' && v[1] === 'user.gender'));
+            assert.ok(matches.some(v => v[0] === '${user.age >= 18 ? (user.gender == \'M\' ? \'Mr.\' : \'Ms.\') : \'Young\'}' && v[1] === 'user'));
+        });
+    });
 }); 

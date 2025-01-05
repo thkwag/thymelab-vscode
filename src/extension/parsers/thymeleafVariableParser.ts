@@ -5,503 +5,737 @@ export interface IteratorInfo {
 }
 
 export class ThymeleafVariableParser {
-    private readonly EXPRESSION_PATTERNS = {
-        VARIABLE:       /\${([^}]+)}/g,
-        SELECTION:      /\*{([^}]+)}/g,
-        FIELD:          /th:field="[*$]\{([^}]+)\}"/g,
-        EACH:           /th:each="([^:\s,]+)(?:\s*,\s*([^:\s]+))?\s*:\s*\${([^}"']+)}"/g,
-        UTILITY:        /#[a-zA-Z]+\.[a-zA-Z]+\((.*)\)/,
-        PROJECTION:     /([a-zA-Z][a-zA-Z0-9]*(?:\.[a-zA-Z][a-zA-Z0-9]*)*)\.\{([^}]+)\}/,
-        LIST_FILTER:    /([a-zA-Z][a-zA-Z0-9]*(?:\.[a-zA-Z][a-zA-Z0-9]*)*)\.\?\[(.*?)\]/,
-        METHOD_CALL:    /([a-zA-Z][a-zA-Z0-9]*(?:\.[a-zA-Z][a-zA-Z0-9]*)*)\.[a-zA-Z][a-zA-Z0-9]*\([^)]*\)/g,
-        PROPERTY:       /([a-zA-Z][a-zA-Z0-9]*(?:\.[a-zA-Z][a-zA-Z0-9]*)*)/g,
-        AUTH:           /#authentication\.([a-zA-Z][a-zA-Z0-9]*(?:\.[a-zA-Z][a-zA-Z0-9]*)*)/,
-        FIELDS:         /#fields\.hasErrors\(['"]([^'"]+)['"]\)/
-    };
+    private static readonly VARIABLE_REGEX = /\${([^}]+)}/g;
+    private static readonly MESSAGE_REGEX = /#{([^}]+)}/g;
+    private static readonly LINK_REGEX = /@{([^}]+)}/g;
+    private static readonly SELECTION_REGEX = /\*{([^}]+)}/g;
+    private static readonly MARKUP_SELECTOR_REGEX = /([^>]+)>([^>]+)/g;
+    private static readonly ATTRIBUTE_SELECTOR_REGEX = /\[([^\]]+)\]/g;
+    private static readonly POSITION_SELECTOR_REGEX = /:nth-child\(([^)]+)\)/g;
+    private static readonly JQUERY_SELECTOR_REGEX = /([^:]+):([^:]+)/g;
+    private static readonly REFERENCE_SELECTOR_REGEX = /#([^#]+)/g;
+    private static readonly HTML_COMMENT_REGEX = /<!--(.*?)-->/gs;
+    private static readonly PARSER_COMMENT_REGEX = /\/\*\[(.*?)\]\*\//gs;
+    private static readonly PROTOTYPE_COMMENT_REGEX = /\/\*\[(.*?)\]\*\//gs;
+    private static readonly UTILITY_OBJECTS = ['#temporals', '#numbers', '#strings', '#dates', 
+        '#calendars', '#objects', '#bools', '#arrays', '#lists', '#sets', '#maps', '#aggregates', 
+        '#messages', '#uris', '#conversions', '#ctx', '#vars', '#locale', '#request', '#response', 
+        '#session', '#servletContext', '#httpServletRequest', '#httpSession'];
 
-    private readonly SPECIAL_FUNCTIONS = new Set([
-        'hasRole',
-        'size',
-        'hasPermission',
-        'hasAuthority'
-    ]);
+    private static readonly ESCAPED_EXPRESSION_REGEX = /\\(\${[^}]+}|#{[^}]+}|@{[^}]+}|\*{[^}]+})/g;
 
-    public findIteratorVariables(line: string): IteratorInfo {
-        const eachMatches = [...line.matchAll(this.EXPRESSION_PATTERNS.EACH)];
-        const iteratorVars = new Set<string>();
-        const parentVars = new Map<string, string>();
-        const statVars = new Map<string, string>();
-        
-        for (const [, itemVar, statVar, parentVar] of eachMatches) {
-            if (itemVar) {
-                const trimmedItem = itemVar.trim();
-                iteratorVars.add(trimmedItem);
-                parentVars.set(trimmedItem, parentVar.trim());
-            }
-            if (statVar) {
-                const trimmedStat = statVar.trim();
-                iteratorVars.add(trimmedStat);
-                statVars.set(trimmedStat, parentVar.trim());
-            }
-        }
-        
-        return { iteratorVars, parentVars, statVars };
+    private preprocessText(text: string): string {
+        // Replace escaped expressions with a placeholder
+        return text.replace(ThymeleafVariableParser.ESCAPED_EXPRESSION_REGEX, '');
     }
 
     public findAllVariableMatches(text: string): [string, string][] {
-        if (text.includes('\\${')) return [];
-        
+        // Preprocess text to handle escaped expressions
+        const processedText = this.preprocessText(text);
         const matches: [string, string][] = [];
-        const seen = new Set<string>();
-        
-        this.processExpressions(text, matches, seen);
-        this.processFieldExpressions(text, matches, seen);
-        
-        return matches;
-    }
+        let match;
 
-    private processExpressions(text: string, matches: [string, string][], seen: Set<string>): void {
-        const allMatches = [
-            ...(text.match(this.EXPRESSION_PATTERNS.VARIABLE) || []),
-            ...(text.match(this.EXPRESSION_PATTERNS.SELECTION) || [])
-        ];
-        
-        for (const match of allMatches) {
-            const expression = match.slice(2, -1).trim();
-            if (expression.includes('\\${')) continue;
-            
-            // Process entire expression
-            const vars = this.extractVariablesFromExpression(expression);
-            for (const v of vars) {
-                const key = `${match}:${v}`;
-                if (!seen.has(key)) {
-                    matches.push([match, v]);
-                    seen.add(key);
+        // Process ${...} expressions
+        while ((match = ThymeleafVariableParser.VARIABLE_REGEX.exec(processedText)) !== null) {
+            const expression = match[1];
+            matches.push(...this.extractVariablesFromExpression(expression));
+        }
+
+        // Process #{...} expressions
+        while ((match = ThymeleafVariableParser.MESSAGE_REGEX.exec(processedText)) !== null) {
+            const expression = match[1];
+            if (expression.includes('(')) {
+                const [messageName, params] = expression.split('(');
+                matches.push([match[0], messageName.trim()]);
+                if (params) {
+                    const cleanParams = params.replace(')', '');
+                    matches.push(...this.extractVariablesFromParameters(cleanParams));
+                }
+            } else {
+                matches.push([match[0], expression.trim()]);
+            }
+        }
+
+        // Process @{...} expressions
+        while ((match = ThymeleafVariableParser.LINK_REGEX.exec(processedText)) !== null) {
+            const expression = match[1];
+            if (expression.includes('(')) {
+                const [path, params] = expression.split('(');
+                if (path.includes('${')) {
+                    matches.push(...this.extractVariablesFromExpression(path));
+                }
+                if (params) {
+                    const cleanParams = params.replace(')', '');
+                    const paramPairs = cleanParams.split(',');
+                    for (const pair of paramPairs) {
+                        if (pair.includes('=')) {
+                            const [, value] = pair.split('=');
+                            matches.push(...this.extractVariablesFromExpression(value.trim()));
+                        }
+                    }
+                }
+            } else {
+                const parts = expression.split('/');
+                for (const part of parts) {
+                    if (part.includes('${')) {
+                        matches.push(...this.extractVariablesFromExpression(part));
+                    }
                 }
             }
-            
-            // Process list filtering
-            if (expression.includes('?[')) {
-                const filterMatch = expression.match(/\?\[(.*?)\]/);
-                if (filterMatch && filterMatch[1]) {
-                    const condition = filterMatch[1].trim();
-                    const conditionVars = this.extractVariablesFromExpression(condition);
-                    for (const v of conditionVars) {
-                        const key = `${match}:${v}`;
-                        if (!seen.has(key)) {
-                            matches.push([match, v]);
-                            seen.add(key);
+        }
+
+        // Process *{...} expressions
+        while ((match = ThymeleafVariableParser.SELECTION_REGEX.exec(processedText)) !== null) {
+            const expression = match[1];
+            matches.push([match[0], expression.trim()]);
+            const parts = expression.split('.');
+            if (parts.length > 1) {
+                let currentPath = '';
+                for (const part of parts) {
+                    currentPath = currentPath ? `${currentPath}.${part}` : part;
+                    matches.push([match[0], currentPath]);
+                }
+            }
+        }
+
+        // Process th:each expressions
+        const eachRegex = /th:each="([^"]+)"/g;
+        while ((match = eachRegex.exec(processedText)) !== null) {
+            const iterExpression = match[1];
+            const parts = iterExpression.split(':');
+            if (parts.length >= 2) {
+                const iterVarParts = parts[0].split(',').map(p => p.trim());
+                const collectionExpr = parts[1].trim();
+                if (collectionExpr.startsWith('${') && collectionExpr.endsWith('}')) {
+                    const collection = collectionExpr.slice(2, -1);
+                    matches.push([collectionExpr, collection]);
+                    const [iterVar, statVar] = iterVarParts[0].split(',').map(v => v.trim());
+                    if (statVar) {
+                        matches.push([`\${${statVar}}`, statVar]);
+                    }
+                    matches.push([`\${${iterVar}}`, iterVar]);
+                }
+            }
+        }
+
+        // Process th:if expressions
+        const ifRegex = /th:if="([^"]+)"/g;
+        while ((match = ifRegex.exec(processedText)) !== null) {
+            const expression = match[1];
+            matches.push(...this.extractVariablesFromExpression(expression));
+        }
+
+        // Process th:with expressions
+        const withRegex = /th:with="([^"]+)"/g;
+        while ((match = withRegex.exec(processedText)) !== null) {
+            const expression = match[1];
+            const assignments = expression.split(',');
+            for (const assignment of assignments) {
+                const [varName, value] = assignment.split('=').map(p => p.trim());
+                matches.push(...this.extractVariablesFromExpression(value));
+                matches.push([`\${${varName}}`, varName]);
+            }
+        }
+
+        // Process th:object expressions
+        const objectRegex = /th:object="\${([^}]+)}"/g;
+        while ((match = objectRegex.exec(processedText)) !== null) {
+            const expression = match[1];
+            matches.push([`\${${expression}}`, expression]);
+        }
+
+        // Process th:field expressions
+        const fieldRegex = /th:field="([^"]+)"/g;
+        while ((match = fieldRegex.exec(processedText)) !== null) {
+            const expression = match[1];
+            matches.push(...this.extractVariablesFromExpression(expression));
+        }
+
+        // Process th:text expressions
+        const textRegex = /th:text="([^"]+)"/g;
+        while ((match = textRegex.exec(processedText)) !== null) {
+            const expression = match[1];
+            matches.push(...this.extractVariablesFromExpression(expression));
+        }
+
+        // Process th:value expressions
+        const valueRegex = /th:value="([^"]+)"/g;
+        while ((match = valueRegex.exec(processedText)) !== null) {
+            const expression = match[1];
+            matches.push(...this.extractVariablesFromExpression(expression));
+        }
+
+        // Process th:attr expressions
+        const attrRegex = /th:attr="([^"]+)"/g;
+        while ((match = attrRegex.exec(processedText)) !== null) {
+            const expression = match[1];
+            const assignments = expression.split(',');
+            for (const assignment of assignments) {
+                const [, value] = assignment.split('=').map(p => p.trim());
+                matches.push(...this.extractVariablesFromExpression(value));
+            }
+        }
+
+        // Process inline expressions [[...]]
+        const inlineRegex = /\[\[([^\]]+)\]\]/g;
+        while ((match = inlineRegex.exec(processedText)) !== null) {
+            const expression = match[1];
+            matches.push(...this.extractVariablesFromExpression(expression));
+        }
+
+        // Process comments
+        this.processComments(processedText, matches, new Set());
+
+        // Process selectors
+        this.processSelectors(processedText, matches, new Set());
+
+        // Process basic objects
+        const basicObjectRegex = /#(ctx|vars|locale|request|response|session|servletContext|httpServletRequest|httpSession)\.([\w.]+)/g;
+        while ((match = basicObjectRegex.exec(processedText)) !== null) {
+            const [fullMatch, , property] = match;
+            matches.push([`\${${fullMatch}}`, property]);
+        }
+
+        // Process security expressions
+        const securityRegex = /(hasRole|hasAnyRole|hasAuthority|hasAnyAuthority|principal|authentication|permitAll|denyAll|isAnonymous|isAuthenticated|isFullyAuthenticated|hasIpAddress)\s*\(([^)]*)\)/g;
+        while ((match = securityRegex.exec(processedText)) !== null) {
+            const [fullMatch, securityFunction, params] = match;
+            if (fullMatch.includes('#authentication.principal')) {
+                const principalRegex = /#authentication\.principal\.([\w.]+)/g;
+                let principalMatch;
+                while ((principalMatch = principalRegex.exec(fullMatch)) !== null) {
+                    const [, property] = principalMatch;
+                    matches.push([fullMatch, `principal.${property}`]);
+                    matches.push([fullMatch, 'principal']);
+                }
+            }
+            if (securityFunction === 'hasRole' || securityFunction === 'hasAnyRole') {
+                const roleRegex = /user\.([\w.]+)\(\)/g;
+                let roleMatch;
+                while ((roleMatch = roleRegex.exec(fullMatch)) !== null) {
+                    const [, method] = roleMatch;
+                    matches.push([fullMatch, 'user']);
+                    matches.push([fullMatch, `user.${method}`]);
+                }
+            }
+            if (params) {
+                matches.push(...this.extractVariablesFromParameters(params));
+            }
+        }
+
+        // Process fragment assertions
+        const fragmentAssertionRegex = /\$\{([^}]+)\}\s*!=\s*(\d+)/g;
+        while ((match = fragmentAssertionRegex.exec(processedText)) !== null) {
+            const [fullMatch, variable] = match;
+            matches.push([fullMatch, variable]);
+        }
+
+        // Process message expressions with parameters
+        const messageWithParamsRegex = /#\{([^}(]+)\(([^)]+)\)\}/g;
+        while ((match = messageWithParamsRegex.exec(processedText)) !== null) {
+            const [fullMatch, messageName, params] = match;
+            matches.push([fullMatch, messageName.trim()]);
+            const paramVars = params.split(',').map(p => p.trim());
+            for (const param of paramVars) {
+                if (param.startsWith('${')) {
+                    matches.push(...this.extractVariablesFromExpression(param.slice(2, -1)));
+                }
+            }
+        }
+
+        // Process nested method calls
+        const nestedMethodRegex = /([a-zA-Z_$][a-zA-Z0-9_$]*(?:\.[a-zA-Z_$][a-zA-Z0-9_$]*)*)\s*\(\s*\)\s*\.\s*([a-zA-Z_$][a-zA-Z0-9_$]*(?:\.[a-zA-Z_$][a-zA-Z0-9_$]*)*)/g;
+        while ((match = nestedMethodRegex.exec(processedText)) !== null) {
+            const [fullMatch, methodCall, chainedCall] = match;
+            const expr = `\${${fullMatch}}`;
+
+            // Process the initial method call
+            const methodParts = methodCall.split('.');
+            let currentPath = '';
+            for (const part of methodParts) {
+                currentPath = currentPath ? `${currentPath}.${part}` : part;
+                matches.push([expr, currentPath]);
+            }
+
+            // Process the chained method call
+            const chainedParts = chainedCall.split('.');
+            currentPath = '';
+            for (const part of chainedParts) {
+                currentPath = currentPath ? `${currentPath}.${part}` : part;
+                matches.push([expr, currentPath]);
+            }
+
+            // Process any selection expressions in the chain
+            const selectionRegex = /\?{1,2}\[(.*?)\]/g;
+            let selectionMatch;
+            while ((selectionMatch = selectionRegex.exec(fullMatch)) !== null) {
+                const [, condition] = selectionMatch;
+                matches.push(...this.extractVariablesFromExpression(condition));
+            }
+        }
+
+        // Remove duplicates while preserving order
+        const seen = new Set<string>();
+        return matches.filter(([expr, variable]) => {
+            const key = `${expr}:${variable}`;
+            if (seen.has(key)) {
+                return false;
+            }
+            seen.add(key);
+            return true;
+        });
+    }
+
+    private extractVariablesFromExpression(expression: string): [string, string][] {
+        const matches: [string, string][] = [];
+        const fullExpression = `\${${expression}}`;
+
+        // Skip if expression is empty or only contains whitespace
+        if (!expression || !expression.trim()) {
+            return matches;
+        }
+
+        // Handle security expressions first
+        if (expression.includes('#authentication')) {
+            const principalRegex = /#authentication\.principal(?:\.(\w+))?/g;
+            let authMatch;
+            while ((authMatch = principalRegex.exec(expression)) !== null) {
+                const [, property] = authMatch;
+                matches.push([fullExpression, 'principal']);
+                if (property) {
+                    matches.push([fullExpression, `principal.${property}`]);
+                }
+            }
+        }
+
+        // Handle security function calls
+        const securityFuncRegex = /(hasRole|hasAnyRole|hasAuthority|hasAnyAuthority)\s*\((.*?)\)/g;
+        let secMatch;
+        while ((secMatch = securityFuncRegex.exec(expression)) !== null) {
+            const [, , params] = secMatch;  // Skip the security function name
+            if (params) {
+                const paramList = this.splitParameters(params);
+                for (const param of paramList) {
+                    if (!this.isStringLiteral(param) && !this.isNumericLiteral(param)) {
+                        const paramVars = this.extractVariablesFromExpression(param.trim());
+                        matches.push(...paramVars);
+                    }
+                }
+            }
+        }
+
+        // Handle selection expressions
+        const selectionRegex = /\?{1,2}\[(.*?)\]/g;
+        let selMatch;
+        while ((selMatch = selectionRegex.exec(expression)) !== null) {
+            const [, condition] = selMatch;
+            const parts = condition.split(/\s+/);
+            for (const part of parts) {
+                if (!this.isReservedWord(part) && !this.isOperator(part) && !this.isStringLiteral(part) && !this.isNumericLiteral(part)) {
+                    const propertyRegex = /([a-zA-Z_$][a-zA-Z0-9_$]*(?:\.[a-zA-Z_$][a-zA-Z0-9_$]*)*)/g;
+                    let propMatch;
+                    while ((propMatch = propertyRegex.exec(part)) !== null) {
+                        const [propertyPath] = propMatch;
+                        if (!propertyPath.startsWith('#') && !this.isReservedWord(propertyPath.split('.')[0]) && !this.isSecurityFunction(propertyPath.split('.')[0])) {
+                            matches.push([fullExpression, propertyPath]);
                         }
                     }
                 }
             }
-            
-            // Process parts separated by logical operators
-            const parts = expression.split(/\s*(?:and|or)\s*/);
-            for (const part of parts) {
-                const cleanPart = part.replace(/[()]/g, '').trim();
-                if (this.isValidVariable(cleanPart) && !this.isLogicalOperator(cleanPart)) {
-                    const key = `${match}:${cleanPart}`;
-                    if (!seen.has(key)) {
-                        matches.push([match, cleanPart]);
-                        seen.add(key);
+        }
+
+        // Handle method calls with parameters
+        const methodCallRegex = /([a-zA-Z_$][a-zA-Z0-9_$]*(?:\.[a-zA-Z_$][a-zA-Z0-9_$]*)*)\s*\((.*?)\)/g;
+        let methodMatch;
+        while ((methodMatch = methodCallRegex.exec(expression)) !== null) {
+            const [, methodPath, params] = methodMatch;
+            const parts = methodPath.split('.');
+            // Skip if the first part is a security function
+            if (!this.isReservedWord(parts[0]) && !this.isSecurityFunction(parts[0])) {
+                let currentPath = '';
+                for (const part of parts) {
+                    if (!this.isReservedWord(part)) {
+                        currentPath = currentPath ? `${currentPath}.${part}` : part;
+                        matches.push([fullExpression, currentPath]);
+                    }
+                }
+                if (params) {
+                    const paramList = this.splitParameters(params);
+                    for (const param of paramList) {
+                        if (!this.isStringLiteral(param) && !this.isNumericLiteral(param)) {
+                            const paramVars = this.extractVariablesFromExpression(param.trim());
+                            matches.push(...paramVars);
+                        }
                     }
                 }
             }
         }
-    }
 
-    private processFieldExpressions(text: string, matches: [string, string][], seen: Set<string>): void {
-        const fieldMatches = text.match(this.EXPRESSION_PATTERNS.FIELD) || [];
-        for (const match of fieldMatches) {
-            const expressionMatch = match.match(/[*$]\{([^}]+)\}/);
-            if (expressionMatch) {
-                this.addVariables(match, expressionMatch[1].trim(), matches, seen);
-            }
-        }
-    }
-
-    private addVariables(match: string, expression: string, matches: [string, string][], seen: Set<string>): void {
-        const vars = this.extractVariablesFromExpression(expression);
-        vars.forEach(v => {
-            const key = `${match}:${v}`;
-            if (!seen.has(key)) {
-                matches.push([match, v]);
-                seen.add(key);
-            }
-        });
-    }
-
-    private extractVariablesFromExpression(expression: string): string[] {
-        const vars = new Set<string>();
-        const cleanExpression = this.cleanExpression(expression);
-        
-        // Handle utility expressions (#dates, #numbers, etc.)
-        if (expression.startsWith('#')) {
-            this.extractUtilityVariables(expression, vars);
-            return Array.from(vars);
-        }
-        
-        // Handle list filtering
-        if (expression.includes('?[')) {
-            const filterMatch = expression.match(/\?\[(.*?)\]/);
-            if (filterMatch && filterMatch[1]) {
-                const condition = filterMatch[1].trim();
-                this.extractComplexExpressionVariables(condition, vars);
-            }
-            
-            // Extract base variable before ?[
-            const baseMatch = expression.match(/([^?]+)\?\[/);
-            if (baseMatch && baseMatch[1]) {
-                this.extractMethodAndPropertyVariables(baseMatch[1].trim(), vars);
-            }
-        }
-        
-        // Handle ternary operator
-        if (expression.includes('?')) {
-            const [condition, ...rest] = expression.split('?');
-            this.extractComplexExpressionVariables(condition.trim(), vars);
-            if (rest.length > 0) {
-                const [truePart, falsePart] = rest.join('?').split(':');
-                if (truePart) this.extractComplexExpressionVariables(truePart.trim(), vars);
-                if (falsePart) this.extractComplexExpressionVariables(falsePart.trim(), vars);
-            }
-            return Array.from(vars).filter(v => !this.isLogicalOperator(v));
-        }
-        
-        // Handle arithmetic operators
-        if (cleanExpression.match(/[+\-*/%]/)) {
-            const parts = cleanExpression.split(/[+\-*/%]/);
-            for (const part of parts) {
-                const trimmed = part.trim();
-                if (this.isValidVariable(trimmed)) {
-                    this.addVariableWithParts(trimmed, vars);
-                }
-            }
-        }
-        
-        // Handle parentheses expressions
-        const withoutParens = cleanExpression.replace(/\([^)]+\)/g, match => {
-            this.extractComplexExpressionVariables(match.slice(1, -1), vars);
-            return '';
-        });
-        
-        // Handle logical operators
-        const parts = withoutParens.split(/\s*(?:and|or)\s*/);
-        for (const part of parts) {
-            const cleanPart = part.trim();
-            if (!cleanPart) continue;
-            
-            if (cleanPart.match(/[><=!]/)) {
+        // Handle logical expressions (and, or, not)
+        const logicalParts = expression.split(/\s+(and|or)\s+/);
+        for (const part of logicalParts) {
+            if (!this.isReservedWord(part) && !this.isOperator(part)) {
                 // Handle comparison operators
-                const [left, right] = cleanPart.split(/[><=!]+/).map(p => p.trim());
-                if (this.isValidVariable(left)) vars.add(left);
-                if (this.isValidVariable(right)) vars.add(right);
-            } else if (cleanPart.match(/[+\-*/%]/)) {
-                // Handle arithmetic operators
-                cleanPart.split(/[+\-*/%]/).map(p => p.trim())
-                    .filter(p => this.isValidVariable(p))
-                    .forEach(p => vars.add(p));
-            } else if (cleanPart.includes('.')) {
-                // Handle method calls and property access
-                this.extractMethodAndPropertyVariables(cleanPart, vars);
-            } else if (this.isValidVariable(cleanPart)) {
-                // Handle simple variables
-                vars.add(cleanPart);
-            }
-        }
-        
-        // Handle method calls and properties
-        if (cleanExpression.includes('.')) {
-            this.extractMethodAndPropertyVariables(cleanExpression, vars);
-        }
-        
-        // Handle simple variables
-        if (this.isValidVariable(cleanExpression)) {
-            vars.add(cleanExpression);
-        }
-        
-        return Array.from(vars).filter(v => !this.isLogicalOperator(v));
-    }
-
-    private cleanExpression(expression: string): string {
-        return expression
-            .replace(/['"][^'"]*['"]/, '')
-            .replace(/\btrue\b|\bfalse\b/, '');
-    }
-
-    private extractUtilityVariables(expression: string, vars: Set<string>): void {
-        // Handle #fields.hasErrors('user.email')
-        const fieldsMatch = expression.match(this.EXPRESSION_PATTERNS.FIELDS);
-        if (fieldsMatch && fieldsMatch[1]) {
-            const variable = fieldsMatch[1].replace(/['"]/g, '');
-            this.addVariableWithParts(variable, vars);
-            return;
-        }
-
-        // Handle #authentication.principal.username
-        const authMatch = expression.match(/#authentication\.(.*?)(?:\s|$|\))/);
-        if (authMatch && authMatch[1]) {
-            this.addVariableWithParts(authMatch[1], vars);
-            return;
-        }
-
-        // Handle #lists.size(users.?[age > 18])
-        const listMatch = expression.match(/#lists\.size\((.*?)\)/);
-        if (listMatch && listMatch[1]) {
-            const content = listMatch[1].trim();
-            if (content.includes('?[')) {
-                const baseMatch = content.match(/([^?]+)\?\[/);
-                if (baseMatch && baseMatch[1]) {
-                    this.extractMethodAndPropertyVariables(baseMatch[1].trim(), vars);
+                const comparisonParts = part.split(/\s*(?:==|!=|>=|<=|>|<)\s*/);
+                for (const compPart of comparisonParts) {
+                    if (!this.isReservedWord(compPart) && !this.isOperator(compPart) && !this.isStringLiteral(compPart) && !this.isNumericLiteral(compPart)) {
+                        const propertyRegex = /([a-zA-Z_$][a-zA-Z0-9_$]*(?:\.[a-zA-Z_$][a-zA-Z0-9_$]*)*)/g;
+                        let propMatch;
+                        while ((propMatch = propertyRegex.exec(compPart)) !== null) {
+                            const [propertyPath] = propMatch;
+                            if (!propertyPath.startsWith('#') && !this.isReservedWord(propertyPath.split('.')[0]) && !this.isSecurityFunction(propertyPath.split('.')[0])) {
+                                const parts = propertyPath.split('.');
+                                let currentPath = '';
+                                for (const part of parts) {
+                                    if (!this.isReservedWord(part)) {
+                                        currentPath = currentPath ? `${currentPath}.${part}` : part;
+                                        matches.push([fullExpression, currentPath]);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-                const filterMatch = content.match(/\?\[(.*?)\]/);
-                if (filterMatch && filterMatch[1]) {
-                    this.extractComplexExpressionVariables(filterMatch[1].trim(), vars);
-                }
-            } else {
-                this.extractMethodAndPropertyVariables(content, vars);
-            }
-            return;
-        }
-
-        // Handle #dates.format(date) or #numbers.formatDecimal(number, ...)
-        const utilityMatch = expression.match(/#(?:dates|numbers)\.\w+\((.*?)\)/);
-        if (utilityMatch && utilityMatch[1]) {
-            const params = utilityMatch[1].split(',')[0].trim();
-            if (this.isValidVariable(params)) {
-                this.addVariableWithParts(params, vars);
-            }
-            return;
-        }
-
-        // Handle #strings.method(variable) and nested utility calls
-        const utilityMethodMatch = expression.match(this.EXPRESSION_PATTERNS.UTILITY);
-        if (utilityMethodMatch && utilityMethodMatch[1]) {
-            const params = utilityMethodMatch[1];
-            
-            // Handle nested utility functions
-            if (params.includes('#')) {
-                const nestedMatches = params.match(/#[a-zA-Z]+\.[a-zA-Z]+\([^)]+\)/g) || [];
-                for (const nestedMatch of nestedMatches) {
-                    this.extractUtilityVariables(nestedMatch, vars);
-                }
-                
-                // Process remaining variables after removing nested functions
-                const cleanParams = params.replace(/#[a-zA-Z]+\.[a-zA-Z]+\([^)]+\)/g, '');
-                this.extractMethodParameters(cleanParams, vars);
-            } else {
-                this.extractMethodParameters(params, vars);
             }
         }
-    }
 
-    private processSpecialSyntax(param: string, vars: Set<string>): boolean {
-        return this.processProjection(param, vars) ||
-               this.processListFilter(param, vars);
-    }
+        // Handle ternary expressions
+        const ternaryRegex = /(.*?)\s*\?\s*(.*?)\s*:\s*(.*)/;
+        let ternMatch;
+        if ((ternMatch = ternaryRegex.exec(expression)) !== null) {
+            const [, condition, truePart, falsePart] = ternMatch;
+            matches.push(...this.extractVariablesFromExpression(condition));
+            matches.push(...this.extractVariablesFromExpression(truePart));
+            matches.push(...this.extractVariablesFromExpression(falsePart));
+        }
 
-    private processProjection(expression: string, vars: Set<string>): boolean {
-        const match = expression.match(this.EXPRESSION_PATTERNS.PROJECTION);
-        if (!match) return false;
-        
-        const [, baseVar, projVar] = match;
-        const cleanBaseVar = baseVar.trim();
-        vars.add(cleanBaseVar);
-        vars.add(`${cleanBaseVar}.${projVar.trim()}`);
-        return true;
-    }
+        // Handle Elvis operator
+        const elvisRegex = /(.*?)\s*\?:\s*(.*)/;
+        let elvisMatch;
+        if ((elvisMatch = elvisRegex.exec(expression)) !== null) {
+            const [, leftPart, rightPart] = elvisMatch;
+            matches.push(...this.extractVariablesFromExpression(leftPart));
+            matches.push(...this.extractVariablesFromExpression(rightPart));
+        }
 
-    private processListFilter(expression: string, vars: Set<string>): boolean {
-        const match = expression.match(this.EXPRESSION_PATTERNS.LIST_FILTER);
-        if (!match) return false;
-        
-        const [, baseVar, condition] = match;
-        this.handlePropertyChain(baseVar, vars);
-        
-        if (condition) {
-            // Extract variables from filter condition
-            const cleanCondition = condition.trim();
-            if (cleanCondition.match(/[><=!+\-*/%]+/)) {
-                this.handleOperatorSides(cleanCondition, /\s*[><=!+\-*/%]+\s*/, vars);
-            } else if (this.isValidVariable(cleanCondition) && !this.isLogicalOperator(cleanCondition)) {
-                vars.add(cleanCondition);
+        // Remove duplicates while preserving order
+        const seen = new Set<string>();
+        return matches.filter(([expr, variable]) => {
+            const key = `${expr}:${variable}`;
+            if (seen.has(key)) {
+                return false;
             }
-        }
-        return true;
-    }
-
-    private processAuthentication(expression: string, vars: Set<string>): void {
-        const match = expression.match(this.EXPRESSION_PATTERNS.AUTH);
-        if (match && match[1]) {
-            this.addVariableWithParts(match[1], vars);
-        }
-    }
-
-    private processFields(expression: string, vars: Set<string>): void {
-        const match = expression.match(this.EXPRESSION_PATTERNS.FIELDS);
-        if (match && match[1]) {
-            this.addVariableWithParts(match[1], vars);
-        }
-    }
-
-    private extractComplexExpressionVariables(expression: string, vars: Set<string>): void {
-        // Handle parentheses expressions
-        expression = expression.replace(/\([^)]+\)/g, match => {
-            this.extractVariablesFromExpression(match.slice(1, -1)).forEach(v => vars.add(v));
-            return '';
+            seen.add(key);
+            return true;
         });
+    }
 
-        // Handle logical operators
-        const parts = expression.split(/\s*(?:and|or)\s*/);
-        for (const part of parts) {
-            const cleanPart = part.trim();
-            if (!cleanPart) continue;
+    private isOperator(word: string): boolean {
+        const operators = new Set([
+            '+', '-', '*', '/', '%',
+            '==', '!=', '>', '<', '>=', '<=',
+            'and', 'or', 'not',
+            '&&', '||', '!',
+            '?', ':', '?:',
+            '.', ',', '(', ')', '[', ']',
+            '=', '+=', '-=', '*=', '/=', '%='
+        ]);
+        return operators.has(word);
+    }
+
+    private isReservedWord(word: string): boolean {
+        const reservedWords = new Set([
+            'and', 'or', 'not', 'gt', 'ge', 'lt', 'le', 'eq', 'ne',
+            'true', 'false', 'null', 'instanceof', 'new', 'return',
+            'this', 'matches', 'contains', 'startsWith', 'endsWith',
+            'size', 'length', 'hasRole', 'hasAnyRole', 'hasAuthority',
+            'hasAnyAuthority', 'principal', 'authentication', 'permitAll',
+            'denyAll', 'isAnonymous', 'isAuthenticated', 'isFullyAuthenticated',
+            'hasIpAddress', 'hasAnyPermission'
+        ]);
+        return reservedWords.has(word.toLowerCase());
+    }
+
+    private isStringLiteral(value: string): boolean {
+        return /^(['"]).*\1$/.test(value.trim());
+    }
+
+    private isNumericLiteral(value: string): boolean {
+        return /^-?\d*\.?\d+$/.test(value.trim());
+    }
+
+    private splitParameters(params: string): string[] {
+        const result: string[] = [];
+        let currentParam = '';
+        let parenCount = 0;
+        let inQuote = false;
+        let quoteChar = '';
+
+        for (let i = 0; i < params.length; i++) {
+            const char = params[i];
             
-            if (cleanPart.match(/[><=!]/)) {
-                // Handle comparison operators
-                this.handleOperatorSides(cleanPart, /[><=!]+/, vars);
-            } else if (cleanPart.match(/[+\-*/%]/)) {
-                // Handle arithmetic operators
-                this.handleOperatorSides(cleanPart, /[+\-*/%]/, vars);
-            } else if (cleanPart.includes('.')) {
-                // Handle method calls and property access
-                this.extractMethodAndPropertyVariables(cleanPart, vars);
-            } else if (this.isValidVariable(cleanPart)) {
-                // Handle simple variables
-                vars.add(cleanPart);
+            if ((char === '\'' || char === '"') && params[i - 1] !== '\\') {
+                if (!inQuote) {
+                    inQuote = true;
+                    quoteChar = char;
+                } else if (char === quoteChar) {
+                    inQuote = false;
+                }
+            } else if (char === '(' && !inQuote) {
+                parenCount++;
+            } else if (char === ')' && !inQuote) {
+                parenCount--;
+            } else if (char === ',' && parenCount === 0 && !inQuote) {
+                if (currentParam.trim()) {
+                    result.push(currentParam.trim());
+                }
+                currentParam = '';
+                continue;
+            }
+            
+            currentParam += char;
+        }
+
+        if (currentParam.trim()) {
+            result.push(currentParam.trim());
+        }
+
+        return result;
+    }
+
+    public findVariableReferences(text: string): { variable: string; startIndex: number; isIteratorVar: boolean; }[] {
+        const matches = this.findAllVariableMatches(text);
+        const iterInfo = this.findIteratorVariables(text);
+        const results: { variable: string; startIndex: number; isIteratorVar: boolean; }[] = [];
+
+        for (const [fullMatch, variable] of matches) {
+            const startIndex = text.indexOf(fullMatch);
+            if (startIndex !== -1) {
+                results.push({
+                    variable,
+                    startIndex,
+                    isIteratorVar: iterInfo.iteratorVars.has(variable)
+                });
+            }
+        }
+
+        return results;
+    }
+
+    public findIteratorVariables(text: string): IteratorInfo {
+        const iteratorVars = new Set<string>();
+        const parentVars = new Map<string, string>();
+        const statVars = new Map<string, string>();
+
+        const eachRegex = /th:each="([^"]+)\s*:\s*\${([^}]+)}"/g;
+        let match;
+
+        while ((match = eachRegex.exec(text)) !== null) {
+            const [, iterPart, collection] = match;
+            const iterVars = iterPart.split(',').map(v => v.trim());
+            
+            if (iterVars.length >= 1) {
+                const iterVar = iterVars[0];
+                iteratorVars.add(iterVar);
+                parentVars.set(iterVar, collection);
+
+                if (iterVars.length >= 2) {
+                    const statVar = iterVars[1];
+                    iteratorVars.add(statVar);
+                    statVars.set(iterVar, statVar);
+                }
+            }
+        }
+
+        return { iteratorVars, parentVars, statVars };
+    }
+
+    private processSelectors(text: string, results: [string, string][], processedExpressions: Set<string>): void {
+        // Process markup selectors (direct children and descendants)
+        let match;
+        while ((match = ThymeleafVariableParser.MARKUP_SELECTOR_REGEX.exec(text)) !== null) {
+            const [fullMatch, parent, child] = match;
+            if (!processedExpressions.has(fullMatch)) {
+                processedExpressions.add(fullMatch);
+                if (parent.includes('${')) {
+                    results.push(...this.extractVariablesFromExpression(parent));
+                }
+                if (child.includes('${')) {
+                    results.push(...this.extractVariablesFromExpression(child));
+                }
+            }
+        }
+
+        // Process attribute selectors
+        while ((match = ThymeleafVariableParser.ATTRIBUTE_SELECTOR_REGEX.exec(text)) !== null) {
+            const [fullMatch, content] = match;
+            if (!processedExpressions.has(fullMatch)) {
+                processedExpressions.add(fullMatch);
+                if (content.includes('=')) {
+                    const [, value] = content.split('=').map(p => p.trim());
+                    if (value.includes('${')) {
+                        results.push(...this.extractVariablesFromExpression(value));
+                    }
+                } else if (content.includes('${')) {
+                    results.push(...this.extractVariablesFromExpression(content));
+                }
+            }
+        }
+
+        // Process position selectors
+        while ((match = ThymeleafVariableParser.POSITION_SELECTOR_REGEX.exec(text)) !== null) {
+            const [fullMatch, content] = match;
+            if (!processedExpressions.has(fullMatch)) {
+                processedExpressions.add(fullMatch);
+                if (content.includes('${')) {
+                    results.push(...this.extractVariablesFromExpression(content));
+                }
+            }
+        }
+
+        // Process jQuery-like selectors
+        while ((match = ThymeleafVariableParser.JQUERY_SELECTOR_REGEX.exec(text)) !== null) {
+            const [fullMatch, selector, filter] = match;
+            if (!processedExpressions.has(fullMatch)) {
+                processedExpressions.add(fullMatch);
+                if (selector.includes('${')) {
+                    results.push(...this.extractVariablesFromExpression(selector));
+                }
+                if (filter.includes('${')) {
+                    results.push(...this.extractVariablesFromExpression(filter));
+                }
+            }
+        }
+
+        // Process reference selectors
+        while ((match = ThymeleafVariableParser.REFERENCE_SELECTOR_REGEX.exec(text)) !== null) {
+            const [fullMatch, content] = match;
+            if (!processedExpressions.has(fullMatch)) {
+                processedExpressions.add(fullMatch);
+                if (content.includes('${')) {
+                    results.push(...this.extractVariablesFromExpression(content));
+                }
+            }
+        }
+
+        // Process URL expressions
+        const urlPattern = /@\{([^}]+)\}/g;
+        while ((match = urlPattern.exec(text)) !== null) {
+            const [fullMatch, urlPath] = match;
+            if (!processedExpressions.has(fullMatch)) {
+                processedExpressions.add(fullMatch);
+                if (urlPath.includes('(')) {
+                    const [path, params] = urlPath.split('(');
+                    if (path.includes('${')) {
+                        results.push(...this.extractVariablesFromExpression(path));
+                    }
+                    if (params) {
+                        const cleanParams = params.replace(')', '');
+                        const paramPairs = cleanParams.split(',');
+                        for (const pair of paramPairs) {
+                            if (pair.includes('=')) {
+                                const [, value] = pair.split('=');
+                                results.push(...this.extractVariablesFromExpression(value.trim()));
+                            } else {
+                                results.push(...this.extractVariablesFromExpression(pair.trim()));
+                            }
+                        }
+                    }
+                } else if (urlPath.includes('${')) {
+                    results.push(...this.extractVariablesFromExpression(urlPath));
+                }
+            }
+        }
+
+        // Process fragment expressions
+        const fragmentPattern = /~\{([^}]+)\}/g;
+        while ((match = fragmentPattern.exec(text)) !== null) {
+            const [fullMatch, fragmentPath] = match;
+            if (!processedExpressions.has(fullMatch)) {
+                processedExpressions.add(fullMatch);
+                if (fragmentPath.includes('(')) {
+                    const [path, params] = fragmentPath.split('(');
+                    if (path.includes('${')) {
+                        results.push(...this.extractVariablesFromExpression(path));
+                    }
+                    if (params) {
+                        const cleanParams = params.replace(')', '');
+                        const paramPairs = cleanParams.split(',');
+                        for (const pair of paramPairs) {
+                            if (pair.includes('=')) {
+                                const [, value] = pair.split('=');
+                                results.push(...this.extractVariablesFromExpression(value.trim()));
+                            }
+                        }
+                    }
+                } else if (fragmentPath.includes('${')) {
+                    results.push(...this.extractVariablesFromExpression(fragmentPath));
+                }
             }
         }
     }
 
-    private isLogicalOperator(str: string): boolean {
-        return ['and', 'or', 'not'].includes(str.toLowerCase());
+    private processComments(text: string, results: [string, string][], processedExpressions: Set<string>): void {
+        // Process standard HTML comments
+        let match;
+        while ((match = ThymeleafVariableParser.HTML_COMMENT_REGEX.exec(text)) !== null) {
+            const [fullMatch, content] = match;
+            if (!processedExpressions.has(fullMatch)) {
+                processedExpressions.add(fullMatch);
+                const vars = this.extractVariablesFromExpression(content);
+                vars.forEach(([, v]) => results.push([fullMatch, v]));
+            }
+        }
+
+        // Process Thymeleaf parser-level comment blocks
+        while ((match = ThymeleafVariableParser.PARSER_COMMENT_REGEX.exec(text)) !== null) {
+            const [fullMatch, content] = match;
+            if (!processedExpressions.has(fullMatch)) {
+                processedExpressions.add(fullMatch);
+                const vars = this.extractVariablesFromExpression(content);
+                vars.forEach(([, v]) => results.push([fullMatch, v]));
+            }
+        }
+
+        // Process Thymeleaf prototype-only comment blocks
+        while ((match = ThymeleafVariableParser.PROTOTYPE_COMMENT_REGEX.exec(text)) !== null) {
+            const [fullMatch, content] = match;
+            if (!processedExpressions.has(fullMatch)) {
+                processedExpressions.add(fullMatch);
+                const vars = this.extractVariablesFromExpression(content);
+                vars.forEach(([, v]) => results.push([fullMatch, v]));
+            }
+        }
     }
 
-    private extractMethodAndPropertyVariables(expression: string, vars: Set<string>): void {
-        // Handle method calls
-        const methodCallMatches = expression.matchAll(this.EXPRESSION_PATTERNS.METHOD_CALL);
-        for (const [fullMatch, baseVar] of Array.from(methodCallMatches)) {
-            this.handleMethodCall(fullMatch, baseVar, vars);
-        }
+    private extractVariablesFromParameters(params: string): [string, string][] {
+        const variables: [string, string][] = [];
+        const paramList = this.splitParameters(params);
         
-        // Handle property chains
-        if (!expression.includes('(')) {
-            this.handlePropertyChain(expression, vars);
-        }
-    }
-
-    private extractMethodParameters(params: string, vars: Set<string>): void {
-        const paramList = params.split(',').map(p => p.trim());
         for (const param of paramList) {
-            if (param.startsWith('\'') || param.startsWith('"')) continue;
-            if (this.isValidVariable(param)) {
-                this.addVariableWithParts(param, vars);
-            }
-        }
-    }
-
-    private extractComparisonVariables(expression: string, vars: Set<string>): void {
-        const parts = expression.split(/\s*[><=!]+\s*/);
-        for (const part of parts) {
-            const cleanPart = this.cleanExpressionPart(part);
-            if (this.isValidVariable(cleanPart) && !this.isLogicalOperator(cleanPart)) {
-                vars.add(cleanPart);
-            }
-        }
-    }
-
-    private cleanExpressionPart(part: string): string {
-        return part.trim().replace(/[()]/g, '');
-    }
-
-    private isValidVariable(variable: string): boolean {
-        if (!variable) return false;
-        variable = variable.trim();
-        
-        // Exclude logical operators, numbers, strings, boolean literals
-        if (this.isLogicalOperator(variable) ||
-            /^[0-9]+$/.test(variable) ||
-            /^['"].*['"]$/.test(variable) ||
-            /^(true|false)$/i.test(variable)) {
-            return false;
-        }
-        
-        // Check for valid variable/property chain
-        return /^[a-zA-Z_$][a-zA-Z0-9_$]*(?:\.[a-zA-Z_$][a-zA-Z0-9_$]*)*$/.test(variable);
-    }
-
-    private addVariableWithParts(variable: string, vars: Set<string>): void {
-        if (!variable || !this.isValidVariable(variable)) return;
-        
-        const parts = variable.split('.');
-        if (parts.length === 1) {
-            vars.add(variable);
-            return;
-        }
-        
-        let current = parts[0];
-        if (this.isValidVariable(current)) {
-            vars.add(current);
-            for (let i = 1; i < parts.length; i++) {
-                current += '.' + parts[i];
-                if (this.isValidVariable(current)) {
-                    vars.add(current);
+            if (param.includes('${')) {
+                const varMatch = /\${([^}]+)}/.exec(param);
+                if (varMatch) {
+                    variables.push(...this.extractVariablesFromExpression(varMatch[1]));
                 }
+            } else if (!this.isStringLiteral(param) && !this.isNumericLiteral(param)) {
+                variables.push(...this.extractVariablesFromExpression(param));
             }
         }
+
+        return variables;
     }
 
-    public findVariableReferences(line: string): Array<{variable: string, startIndex: number, isIteratorVar: boolean}> {
-        const matches = [...line.matchAll(this.EXPRESSION_PATTERNS.VARIABLE)];
-        const iteratorInfo = this.findIteratorVariables(line);
-        
-        return matches.map(match => {
-            const variable = match[1].trim();
-            const startIndex = line.indexOf(variable, line.indexOf(match[0]));
-            const isIteratorVar = iteratorInfo.iteratorVars.has(variable.split('.')[0]);
-            return { variable, startIndex, isIteratorVar };
-        });
+    private isSecurityFunction(word: string): boolean {
+        const securityFunctions = new Set([
+            'hasRole', 'hasAnyRole', 'hasAuthority', 'hasAnyAuthority',
+            'principal', 'authentication', 'permitAll', 'denyAll',
+            'isAnonymous', 'isAuthenticated', 'isFullyAuthenticated',
+            'hasIpAddress', 'hasAnyPermission'
+        ]);
+        return securityFunctions.has(word);
     }
+}
 
-    // Common helper methods
-    private handlePropertyChain(baseVar: string, vars: Set<string>): void {
-        const parts = baseVar.split('.');
-        if (parts.length > 0 && this.isValidVariable(parts[0])) {
-            let chain = parts[0];
-            vars.add(chain);
-            for (let i = 1; i < parts.length; i++) {
-                chain += '.' + parts[i];
-                if (this.isValidVariable(chain)) {
-                    vars.add(chain);
-                }
-            }
-        }
-    }
 
-    private handleOperatorSides(expression: string, operatorPattern: RegExp | string, vars: Set<string>): void {
-        const sides = expression.split(operatorPattern).map(p => p.trim());
-        for (const side of sides) {
-            if (this.isValidVariable(side)) {
-                vars.add(side);
-            }
-        }
-    }
 
-    private handleMethodCall(fullMatch: string, baseVar: string, vars: Set<string>): void {
-        // Extract base variable and its chain
-        this.handlePropertyChain(baseVar, vars);
-        
-        // Extract method chain
-        const methodName = fullMatch.split('(')[0];
-        if (methodName.includes('.')) {
-            this.addVariableWithParts(methodName, vars);
-        }
-        
-        // Extract parameters
-        const paramsMatch = fullMatch.match(/\((.*)\)/);
-        if (paramsMatch && paramsMatch[1]) {
-            this.extractMethodParameters(paramsMatch[1], vars);
-        }
-    }
-} 
