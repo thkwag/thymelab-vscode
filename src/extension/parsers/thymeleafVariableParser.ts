@@ -5,10 +5,10 @@ export interface IteratorInfo {
 }
 
 export class ThymeleafVariableParser {
-    private static readonly VARIABLE_REGEX = /\${([^}]+)}/g;
-    private static readonly MESSAGE_REGEX = /#{([^}]+)}/g;
-    private static readonly LINK_REGEX = /@{([^}]+)}/g;
-    private static readonly SELECTION_REGEX = /\*{([^}]+)}/g;
+    private static readonly VARIABLE_REGEX = /(\${([^}]+)})/g;
+    private static readonly MESSAGE_REGEX = /(#{([^}]+)})/g;
+    private static readonly LINK_REGEX = /(@{([^}]+)})/g;
+    private static readonly SELECTION_REGEX = /(\*{([^}]+)})/g;
     private static readonly MARKUP_SELECTOR_REGEX = /([^>]+)>([^>]+)/g;
     private static readonly ATTRIBUTE_SELECTOR_REGEX = /\[([^\]]+)\]/g;
     private static readonly POSITION_SELECTOR_REGEX = /:nth-child\(([^)]+)\)/g;
@@ -37,32 +37,35 @@ export class ThymeleafVariableParser {
 
         // Process ${...} expressions
         while ((match = ThymeleafVariableParser.VARIABLE_REGEX.exec(processedText)) !== null) {
-            const expression = match[1];
-            matches.push(...this.extractVariablesFromExpression(expression));
+            const fullMatch = match[1];
+            const expression = match[2];
+            matches.push(...this.extractVariablesFromExpression(expression).map(([, v]): [string, string] => [fullMatch, v]));
         }
 
         // Process #{...} expressions
         while ((match = ThymeleafVariableParser.MESSAGE_REGEX.exec(processedText)) !== null) {
-            const expression = match[1];
+            const fullMatch = match[1];
+            const expression = match[2];
             if (expression.includes('(')) {
                 const [messageName, params] = expression.split('(');
-                matches.push([match[0], messageName.trim()]);
+                matches.push([fullMatch, messageName.trim()]);
                 if (params) {
                     const cleanParams = params.replace(')', '');
-                    matches.push(...this.extractVariablesFromParameters(cleanParams));
+                    matches.push(...this.extractVariablesFromParameters(cleanParams).map(([, v]): [string, string] => [fullMatch, v]));
                 }
             } else {
-                matches.push([match[0], expression.trim()]);
+                matches.push([fullMatch, expression.trim()]);
             }
         }
 
         // Process @{...} expressions
         while ((match = ThymeleafVariableParser.LINK_REGEX.exec(processedText)) !== null) {
-            const expression = match[1];
+            const fullMatch = match[1];
+            const expression = match[2];
             if (expression.includes('(')) {
                 const [path, params] = expression.split('(');
                 if (path.includes('${')) {
-                    matches.push(...this.extractVariablesFromExpression(path));
+                    matches.push(...this.extractVariablesFromExpression(path).map(([, v]): [string, string] => [fullMatch, v]));
                 }
                 if (params) {
                     const cleanParams = params.replace(')', '');
@@ -70,7 +73,7 @@ export class ThymeleafVariableParser {
                     for (const pair of paramPairs) {
                         if (pair.includes('=')) {
                             const [, value] = pair.split('=');
-                            matches.push(...this.extractVariablesFromExpression(value.trim()));
+                            matches.push(...this.extractVariablesFromExpression(value.trim()).map(([, v]): [string, string] => [fullMatch, v]));
                         }
                     }
                 }
@@ -78,7 +81,7 @@ export class ThymeleafVariableParser {
                 const parts = expression.split('/');
                 for (const part of parts) {
                     if (part.includes('${')) {
-                        matches.push(...this.extractVariablesFromExpression(part));
+                        matches.push(...this.extractVariablesFromExpression(part).map(([, v]): [string, string] => [fullMatch, v]));
                     }
                 }
             }
@@ -86,14 +89,15 @@ export class ThymeleafVariableParser {
 
         // Process *{...} expressions
         while ((match = ThymeleafVariableParser.SELECTION_REGEX.exec(processedText)) !== null) {
-            const expression = match[1];
-            matches.push([match[0], expression.trim()]);
+            const fullMatch = match[1];
+            const expression = match[2];
+            matches.push([fullMatch, expression.trim()]);
             const parts = expression.split('.');
             if (parts.length > 1) {
                 let currentPath = '';
                 for (const part of parts) {
                     currentPath = currentPath ? `${currentPath}.${part}` : part;
-                    matches.push([match[0], currentPath]);
+                    matches.push([fullMatch, currentPath]);
                 }
             }
         }
@@ -508,15 +512,22 @@ export class ThymeleafVariableParser {
         const iterInfo = this.findIteratorVariables(text);
         const results: { variable: string; startIndex: number; isIteratorVar: boolean; }[] = [];
 
-        for (const [fullMatch, variable] of matches) {
-            const startIndex = text.indexOf(fullMatch);
-            if (startIndex !== -1) {
-                results.push({
-                    variable,
-                    startIndex,
-                    isIteratorVar: iterInfo.iteratorVars.has(variable)
-                });
+        // Split text into lines and process each line separately
+        const lines = text.split('\n');
+        let currentPosition = 0;
+
+        for (const line of lines) {
+            for (const [fullMatch, variable] of matches) {
+                const lineStartIndex = line.indexOf(fullMatch);
+                if (lineStartIndex !== -1) {
+                    results.push({
+                        variable,
+                        startIndex: currentPosition + lineStartIndex + 2,
+                        isIteratorVar: iterInfo.iteratorVars.has(variable)
+                    });
+                }
             }
+            currentPosition += line.length + 1; // +1 for the newline character
         }
 
         return results;
